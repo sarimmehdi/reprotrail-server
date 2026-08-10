@@ -56,12 +56,16 @@ internal sealed interface IngestOutcome {
     data object Conflict : IngestOutcome
 }
 
+internal fun interface TraceIngestor {
+    fun ingest(request: IngestRequest): IngestOutcome
+}
+
 internal class IngestTraceUseCase(
     private val authorizer: IngestAuthorizer,
     private val validator: TraceContractValidator,
     private val repository: TraceRepository,
-) {
-    fun ingest(request: IngestRequest): IngestOutcome {
+) : TraceIngestor {
+    override fun ingest(request: IngestRequest): IngestOutcome {
         if (!authorizer.isAuthorized(request.projectId, request.token)) {
             return IngestOutcome.Unauthorized
         }
