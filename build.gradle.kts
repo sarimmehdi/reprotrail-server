@@ -9,6 +9,7 @@ import org.gradle.api.tasks.TaskAction
 
 plugins {
     kotlin("jvm") version "2.3.21"
+    kotlin("plugin.serialization") version "2.3.21"
     kotlin("plugin.spring") version "2.3.21"
     id("org.springframework.boot") version "4.1.0"
     id("io.spring.dependency-management") version "1.1.7"
@@ -36,6 +37,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+    implementation("com.networknt:json-schema-validator:3.0.6")
     implementation("tools.jackson.module:jackson-module-kotlin")
     runtimeOnly("org.postgresql:postgresql")
     testImplementation("org.springframework.boot:spring-boot-starter-actuator-test")
