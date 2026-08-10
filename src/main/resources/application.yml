@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: reprotrail-server
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
