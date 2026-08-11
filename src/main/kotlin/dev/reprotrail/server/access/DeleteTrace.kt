@@ -22,7 +22,12 @@ internal sealed interface TraceDeletionResult {
 }
 
 internal fun interface TraceDeleter {
-    fun delete(projectId: UUID, sessionId: UUID, actorCredentialId: UUID): TraceDeletionResult
+    fun delete(
+        projectId: UUID,
+        sessionId: UUID,
+        actorCredentialId: UUID?,
+        auditAction: TraceAuditAction,
+    ): TraceDeletionResult
 }
 
 internal class DeleteTrace(
@@ -30,7 +35,12 @@ internal class DeleteTrace(
     private val artifactDeleter: TraceArtifactDeleter,
     private val clock: Clock,
 ) : TraceDeleter {
-    override fun delete(projectId: UUID, sessionId: UUID, actorCredentialId: UUID): TraceDeletionResult {
+    override fun delete(
+        projectId: UUID,
+        sessionId: UUID,
+        actorCredentialId: UUID?,
+        auditAction: TraceAuditAction,
+    ): TraceDeletionResult {
         val reference = catalog.reserve(projectId, sessionId) ?: return TraceDeletionResult.NotFound
         try {
             artifactDeleter.delete(reference)
@@ -43,7 +53,7 @@ internal class DeleteTrace(
                 projectId = projectId,
                 traceId = sessionId,
                 actorCredentialId = actorCredentialId,
-                action = TraceAuditAction.Deleted,
+                action = auditAction,
                 occurredAt = clock.instant(),
             ),
         )

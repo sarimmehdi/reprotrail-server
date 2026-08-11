@@ -20,7 +20,10 @@ class DeleteTraceTest {
 
     @Test
     fun `deletion removes content before atomically completing metadata and audit`() {
-        assertEquals(TraceDeletionResult.Deleted, deleter.delete(projectId, traceId, credentialId))
+        assertEquals(
+            TraceDeletionResult.Deleted,
+            deleter.delete(projectId, traceId, credentialId, TraceAuditAction.Deleted),
+        )
 
         assertEquals(reference, artifactDeleter.deleted)
         assertEquals(
@@ -33,7 +36,10 @@ class DeleteTraceTest {
     fun `missing tenant trace does not touch object storage`() {
         catalog.reference = null
 
-        assertEquals(TraceDeletionResult.NotFound, deleter.delete(projectId, traceId, credentialId))
+        assertEquals(
+            TraceDeletionResult.NotFound,
+            deleter.delete(projectId, traceId, credentialId, TraceAuditAction.Deleted),
+        )
         assertEquals(null, artifactDeleter.deleted)
     }
 
@@ -41,7 +47,9 @@ class DeleteTraceTest {
     fun `storage failure leaves a retryable deletion state and no audit tombstone`() {
         artifactDeleter.failure = IllegalStateException("storage unavailable")
 
-        assertThrows(IllegalStateException::class.java) { deleter.delete(projectId, traceId, credentialId) }
+        assertThrows(IllegalStateException::class.java) {
+            deleter.delete(projectId, traceId, credentialId, TraceAuditAction.Deleted)
+        }
         assertEquals(projectId to traceId, catalog.failed)
         assertEquals(null, catalog.completed)
     }

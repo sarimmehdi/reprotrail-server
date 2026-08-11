@@ -81,7 +81,7 @@ internal class TraceAccessController(
     ): ResponseEntity<Any> {
         val identity = (principal as? Authentication)?.principal as? DeveloperIdentity
             ?: return error(HttpStatus.UNAUTHORIZED, "unauthorized", "Valid developer credentials are required.")
-        return when (deleter.delete(projectId, traceId, identity.credentialId)) {
+        return when (deleter.delete(projectId, traceId, identity.credentialId, TraceAuditAction.Deleted)) {
             TraceDeletionResult.Deleted -> ResponseEntity.noContent().build()
             TraceDeletionResult.NotFound -> error(HttpStatus.NOT_FOUND, "trace_not_found", "Trace was not found.")
         }

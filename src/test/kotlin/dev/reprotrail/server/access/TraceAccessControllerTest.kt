@@ -102,6 +102,7 @@ class TraceAccessControllerTest {
         }.andExpect { status { isNoContent() } }
 
         assertEquals(Triple(projectId, sessionId, sessionId), deleter.lastRequest)
+        assertEquals(TraceAuditAction.Deleted, deleter.lastAction)
     }
 
     private class RecordingBrowser(initialTrace: TraceMetadata) : TraceBrowser {
@@ -132,9 +133,16 @@ class TraceAccessControllerTest {
     private class RecordingDeleter : TraceDeleter {
         var result: TraceDeletionResult = TraceDeletionResult.NotFound
         var lastRequest: Triple<UUID, UUID, UUID>? = null
+        var lastAction: TraceAuditAction? = null
 
-        override fun delete(projectId: UUID, sessionId: UUID, actorCredentialId: UUID): TraceDeletionResult {
-            lastRequest = Triple(projectId, sessionId, actorCredentialId)
+        override fun delete(
+            projectId: UUID,
+            sessionId: UUID,
+            actorCredentialId: UUID?,
+            auditAction: TraceAuditAction,
+        ): TraceDeletionResult {
+            lastRequest = Triple(projectId, sessionId, checkNotNull(actorCredentialId))
+            lastAction = auditAction
             return result
         }
     }

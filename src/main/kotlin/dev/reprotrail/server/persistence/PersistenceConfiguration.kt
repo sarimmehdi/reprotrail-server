@@ -10,6 +10,7 @@ import dev.reprotrail.server.security.HmacTokenDigester
 import dev.reprotrail.server.security.IngestCredentialLookup
 import dev.reprotrail.server.security.SecureDeveloperAuthorizer
 import dev.reprotrail.server.security.SecureIngestAuthorizer
+import dev.reprotrail.server.retention.TraceRetentionCatalog
 import java.time.Clock
 import java.util.Base64
 import org.springframework.beans.factory.annotation.Value
@@ -52,6 +53,9 @@ internal class PersistenceConfiguration {
         jdbc: JdbcClient,
         transactionManager: PlatformTransactionManager,
     ): TraceDeletionCatalog = JdbcTraceDeletionCatalog(jdbc, TransactionTemplate(transactionManager))
+
+    @Bean
+    fun traceRetentionCatalog(jdbc: JdbcClient): TraceRetentionCatalog = JdbcTraceRetentionCatalog(jdbc)
 
     @Bean
     fun traceRepository(

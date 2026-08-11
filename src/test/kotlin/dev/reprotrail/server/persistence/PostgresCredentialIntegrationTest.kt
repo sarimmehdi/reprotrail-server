@@ -13,6 +13,7 @@ import dev.reprotrail.server.security.HmacTokenDigester
 import dev.reprotrail.server.security.DeveloperCredentialLookup
 import dev.reprotrail.server.security.IngestCredentialLookup
 import dev.reprotrail.server.security.SecureIngestAuthorizer
+import dev.reprotrail.server.retention.TraceRetentionCatalog
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.concurrent.ConcurrentHashMap
@@ -75,6 +76,9 @@ class PostgresCredentialIntegrationTest {
 
     @Autowired
     private lateinit var traceDeletionCatalog: TraceDeletionCatalog
+
+    @Autowired
+    private lateinit var traceRetentionCatalog: TraceRetentionCatalog
 
     @Autowired
     private lateinit var contentStore: InMemoryTraceContentStore
@@ -249,6 +253,20 @@ class PostgresCredentialIntegrationTest {
 
         assertEquals("delete_failed", traceStorageState(traceSessionId))
         assertNotNull(traceDeletionCatalog.reserve(projectId, traceSessionId))
+    }
+
+    @Test
+    fun `retention catalog returns only bounded available traces older than cutoff`() {
+        val oldId = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f470")
+        val newId = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f471")
+        val pendingId = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f472")
+        insertTrace(oldId, "2026-06-01T00:00:00Z", "available")
+        insertTrace(newId, "2026-08-10T00:00:00Z", "available")
+        insertTrace(pendingId, "2026-05-01T00:00:00Z", "pending")
+
+        val expired = traceRetentionCatalog.findExpired(Instant.parse("2026-07-01T00:00:00Z"), 1)
+
+        assertEquals(listOf(oldId), expired.map { it.sessionId })
     }
 
     @Test

@@ -17,6 +17,7 @@ import dev.reprotrail.server.ingest.TraceRepository
 import dev.reprotrail.server.security.DeveloperAuthorizer
 import dev.reprotrail.server.security.DeveloperIdentity
 import java.time.Clock
+import dev.reprotrail.server.retention.TraceRetentionCatalog
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -100,5 +101,8 @@ class ReproTrailServerApplicationTest {
 
         @Bean
         internal fun applicationClock(): Clock = Clock.systemUTC()
+
+        @Bean
+        internal fun traceRetentionCatalog(): TraceRetentionCatalog = TraceRetentionCatalog { _, _ -> emptyList() }
     }
 }
