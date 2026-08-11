@@ -5,6 +5,8 @@ import dev.reprotrail.server.ingest.StoredTrace
 import dev.reprotrail.server.ingest.TraceCreateResult
 import dev.reprotrail.server.ingest.TraceIngestor
 import dev.reprotrail.server.ingest.TraceRepository
+import dev.reprotrail.server.security.DeveloperAuthorizer
+import dev.reprotrail.server.security.DeveloperIdentity
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -41,6 +43,10 @@ class ReproTrailServerApplicationTest {
     class InfrastructureTestConfiguration {
         @Bean
         internal fun ingestAuthorizer(): IngestAuthorizer = IngestAuthorizer { _, _ -> true }
+
+        @Bean
+        internal fun developerAuthorizer(): DeveloperAuthorizer =
+            DeveloperAuthorizer { projectId, _ -> DeveloperIdentity(projectId, java.util.UUID.randomUUID()) }
 
         @Bean
         internal fun traceRepository(): TraceRepository =

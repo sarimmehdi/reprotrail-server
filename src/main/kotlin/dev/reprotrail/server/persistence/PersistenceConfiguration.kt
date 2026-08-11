@@ -1,8 +1,10 @@
 package dev.reprotrail.server.persistence
 
 import dev.reprotrail.server.ingest.TraceRepository
+import dev.reprotrail.server.security.DeveloperCredentialLookup
 import dev.reprotrail.server.security.HmacTokenDigester
 import dev.reprotrail.server.security.IngestCredentialLookup
+import dev.reprotrail.server.security.SecureDeveloperAuthorizer
 import dev.reprotrail.server.security.SecureIngestAuthorizer
 import java.time.Clock
 import java.util.Base64
@@ -20,6 +22,9 @@ internal class PersistenceConfiguration {
 
     @Bean
     fun ingestCredentialLookup(jdbc: JdbcClient): IngestCredentialLookup = JdbcIngestCredentialLookup(jdbc)
+
+    @Bean
+    fun developerCredentialLookup(jdbc: JdbcClient): DeveloperCredentialLookup = JdbcDeveloperCredentialLookup(jdbc)
 
     @Bean
     fun traceMetadataStore(jdbc: JdbcClient): TraceMetadataStore = JdbcTraceMetadataStore(jdbc)
@@ -45,4 +50,11 @@ internal class PersistenceConfiguration {
         digester: HmacTokenDigester,
         clock: Clock,
     ): SecureIngestAuthorizer = SecureIngestAuthorizer(lookup, digester, clock)
+
+    @Bean
+    fun secureDeveloperAuthorizer(
+        lookup: DeveloperCredentialLookup,
+        digester: HmacTokenDigester,
+        clock: Clock,
+    ): SecureDeveloperAuthorizer = SecureDeveloperAuthorizer(lookup, digester, clock)
 }

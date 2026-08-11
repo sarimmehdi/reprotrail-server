@@ -4,6 +4,7 @@ import dev.reprotrail.server.contract.ValidatedTraceMetadata
 import dev.reprotrail.server.ingest.StoredTrace
 import dev.reprotrail.server.ingest.TraceRepository
 import dev.reprotrail.server.security.HmacTokenDigester
+import dev.reprotrail.server.security.DeveloperCredentialLookup
 import dev.reprotrail.server.security.IngestCredentialLookup
 import dev.reprotrail.server.security.SecureIngestAuthorizer
 import java.time.Instant
@@ -46,6 +47,9 @@ class PostgresCredentialIntegrationTest {
     private lateinit var lookup: IngestCredentialLookup
 
     @Autowired
+    private lateinit var developerLookup: DeveloperCredentialLookup
+
+    @Autowired
     private lateinit var digester: HmacTokenDigester
 
     @Autowired
@@ -65,6 +69,7 @@ class PostgresCredentialIntegrationTest {
     fun resetDatabase() {
         jdbc.sql("delete from audit_events").update()
         jdbc.sql("delete from traces").update()
+        jdbc.sql("delete from developer_credentials").update()
         jdbc.sql("delete from ingest_credentials").update()
         jdbc.sql("delete from projects").update()
         contentStore.clear()
@@ -86,7 +91,11 @@ class PostgresCredentialIntegrationTest {
                 """.trimIndent(),
             ).query(String::class.java).list()
 
-        assertTrue(tables.containsAll(listOf("audit_events", "ingest_credentials", "projects", "traces")))
+        assertTrue(
+            tables.containsAll(
+                listOf("audit_events", "developer_credentials", "ingest_credentials", "projects", "traces"),
+            ),
+        )
     }
 
     @Test
@@ -112,6 +121,29 @@ class PostgresCredentialIntegrationTest {
 
         assertTrue(authorizer.isAuthorized(projectId, "rt_ingest_$credentialId.$secret"))
         assertFalse(authorizer.isAuthorized(projectId, "rt_ingest_$credentialId.${secret.reversed()}"))
+    }
+
+    @Test
+    fun `developer credential lookup is separately project scoped`() {
+        val digest = digester.digest(secret)
+        jdbc.sql(
+            """
+            insert into developer_credentials (id, project_id, token_digest, expires_at)
+            values (:id, :projectId, :tokenDigest, :expiresAt)
+            """.trimIndent(),
+        ).param("id", credentialId)
+            .param("projectId", projectId)
+            .param("tokenDigest", digest)
+            .param("expiresAt", Instant.parse("2030-01-01T00:00:00Z").atOffset(ZoneOffset.UTC))
+            .update()
+
+        val stored = developerLookup.find(projectId, credentialId)
+
+        assertArrayEquals(digest, stored?.tokenDigest)
+        assertEquals(
+            null,
+            developerLookup.find(UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f499"), credentialId),
+        )
     }
 
     @Test
