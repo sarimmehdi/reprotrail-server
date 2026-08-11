@@ -3,6 +3,8 @@ package dev.reprotrail.server.storage
 import dev.reprotrail.server.access.TraceArtifactReader
 import dev.reprotrail.server.access.TraceArtifactReference
 import dev.reprotrail.server.access.TraceArtifactDeleter
+import dev.reprotrail.server.reconciliation.TraceArtifactInspection
+import dev.reprotrail.server.reconciliation.TraceArtifactInspector
 import dev.reprotrail.server.persistence.TraceContentStore
 import dev.reprotrail.server.persistence.TraceContentWrite
 import dev.reprotrail.server.persistence.TraceContentWriteResult
@@ -17,7 +19,7 @@ import software.amazon.awssdk.services.s3.model.S3Exception
 internal class S3TraceContentStore(
     private val client: S3Client,
     private val bucket: String,
-) : TraceContentStore, TraceArtifactReader, TraceArtifactDeleter {
+) : TraceContentStore, TraceArtifactReader, TraceArtifactDeleter, TraceArtifactInspector {
     override fun putIfAbsent(write: TraceContentWrite): TraceContentWriteResult {
         var lastConflict: S3Exception? = null
         repeat(MAX_CONDITIONAL_ATTEMPTS) { attempt ->
@@ -62,6 +64,19 @@ internal class S3TraceContentStore(
     override fun delete(reference: TraceArtifactReference) {
         client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(reference.objectKey).build())
     }
+
+    override fun inspect(reference: TraceArtifactReference, expectedSha256: ByteArray): TraceArtifactInspection =
+        try {
+            val existing =
+                client.headObject(HeadObjectRequest.builder().bucket(bucket).key(reference.objectKey).build())
+            if (existing.metadata()[CONTENT_SHA256_METADATA] == expectedSha256.toHex()) {
+                TraceArtifactInspection.Matching
+            } else {
+                TraceArtifactInspection.Conflict
+            }
+        } catch (failure: S3Exception) {
+            if (failure.statusCode() == NOT_FOUND) TraceArtifactInspection.Missing else throw failure
+        }
 
     private fun inspectExistingOrThrow(
         write: TraceContentWrite,

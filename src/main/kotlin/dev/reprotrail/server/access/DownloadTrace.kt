@@ -20,6 +20,7 @@ internal enum class TraceAuditAction {
     Downloaded,
     Deleted,
     RetentionDeleted,
+    ReconciledDeleted,
 }
 
 internal data class TraceAuditEvent(

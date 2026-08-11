@@ -14,6 +14,8 @@ import dev.reprotrail.server.security.DeveloperCredentialLookup
 import dev.reprotrail.server.security.IngestCredentialLookup
 import dev.reprotrail.server.security.SecureIngestAuthorizer
 import dev.reprotrail.server.retention.TraceRetentionCatalog
+import dev.reprotrail.server.reconciliation.ReconciliationState
+import dev.reprotrail.server.reconciliation.TraceReconciliationCatalog
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.concurrent.ConcurrentHashMap
@@ -79,6 +81,9 @@ class PostgresCredentialIntegrationTest {
 
     @Autowired
     private lateinit var traceRetentionCatalog: TraceRetentionCatalog
+
+    @Autowired
+    private lateinit var traceReconciliationCatalog: TraceReconciliationCatalog
 
     @Autowired
     private lateinit var contentStore: InMemoryTraceContentStore
@@ -267,6 +272,26 @@ class PostgresCredentialIntegrationTest {
         val expired = traceRetentionCatalog.findExpired(Instant.parse("2026-07-01T00:00:00Z"), 1)
 
         assertEquals(listOf(oldId), expired.map { it.sessionId })
+    }
+
+    @Test
+    fun `reconciliation catalog finds stale transitions and applies state specific repairs`() {
+        val pendingId = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f480")
+        val deletingId = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f481")
+        insertTrace(pendingId, "2026-08-01T00:00:00Z", "pending")
+        insertTrace(deletingId, "2026-08-01T00:01:00Z", "deleting")
+
+        val candidates =
+            traceReconciliationCatalog.findStale(Instant.parse("2026-08-02T00:00:00Z"), 10)
+        traceReconciliationCatalog.markAvailable(projectId, pendingId)
+        traceReconciliationCatalog.markFailed(projectId, deletingId)
+
+        assertEquals(
+            setOf(pendingId to ReconciliationState.Pending, deletingId to ReconciliationState.Deleting),
+            candidates.map { it.sessionId to it.state }.toSet(),
+        )
+        assertEquals("available", traceStorageState(pendingId))
+        assertEquals("delete_failed", traceStorageState(deletingId))
     }
 
     @Test

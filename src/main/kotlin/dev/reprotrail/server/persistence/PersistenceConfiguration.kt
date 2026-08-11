@@ -11,6 +11,7 @@ import dev.reprotrail.server.security.IngestCredentialLookup
 import dev.reprotrail.server.security.SecureDeveloperAuthorizer
 import dev.reprotrail.server.security.SecureIngestAuthorizer
 import dev.reprotrail.server.retention.TraceRetentionCatalog
+import dev.reprotrail.server.reconciliation.TraceReconciliationCatalog
 import java.time.Clock
 import java.util.Base64
 import org.springframework.beans.factory.annotation.Value
@@ -56,6 +57,10 @@ internal class PersistenceConfiguration {
 
     @Bean
     fun traceRetentionCatalog(jdbc: JdbcClient): TraceRetentionCatalog = JdbcTraceRetentionCatalog(jdbc)
+
+    @Bean
+    fun traceReconciliationCatalog(jdbc: JdbcClient): TraceReconciliationCatalog =
+        JdbcTraceReconciliationCatalog(jdbc)
 
     @Bean
     fun traceRepository(

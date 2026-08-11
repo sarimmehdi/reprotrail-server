@@ -1,6 +1,7 @@
 package dev.reprotrail.server.storage
 
 import dev.reprotrail.server.access.TraceArtifactReference
+import dev.reprotrail.server.reconciliation.TraceArtifactInspection
 import dev.reprotrail.server.persistence.TraceContentWrite
 import dev.reprotrail.server.persistence.TraceContentWriteResult
 import java.net.URI
@@ -53,6 +54,14 @@ class S3TraceContentStoreIntegrationTest {
         assertEquals(TraceContentWriteResult.Stored, store.putIfAbsent(write(objectKey, original)))
         assertEquals(TraceContentWriteResult.AlreadyExists, store.putIfAbsent(write(objectKey, original)))
         assertEquals(TraceContentWriteResult.Conflict, store.putIfAbsent(write(objectKey, changed)))
+        assertEquals(
+            TraceArtifactInspection.Matching,
+            store.inspect(TraceArtifactReference(objectKey), MessageDigest.getInstance("SHA-256").digest(original)),
+        )
+        assertEquals(
+            TraceArtifactInspection.Conflict,
+            store.inspect(TraceArtifactReference(objectKey), MessageDigest.getInstance("SHA-256").digest(changed)),
+        )
 
         val stored =
             client.getObject(
@@ -65,6 +74,10 @@ class S3TraceContentStoreIntegrationTest {
         store.delete(TraceArtifactReference(objectKey))
         assertEquals(null, store.read(TraceArtifactReference(objectKey)))
         assertEquals(null, store.read(TraceArtifactReference("missing.json")))
+        assertEquals(
+            TraceArtifactInspection.Missing,
+            store.inspect(TraceArtifactReference("missing.json"), ByteArray(32)),
+        )
     }
 
     private fun write(objectKey: String, content: ByteArray) =

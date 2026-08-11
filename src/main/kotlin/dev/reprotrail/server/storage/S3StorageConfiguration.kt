@@ -2,6 +2,7 @@ package dev.reprotrail.server.storage
 
 import dev.reprotrail.server.access.TraceArtifactReader
 import dev.reprotrail.server.access.TraceArtifactDeleter
+import dev.reprotrail.server.reconciliation.TraceArtifactInspector
 import dev.reprotrail.server.persistence.TraceContentStore
 import java.net.URI
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -60,5 +61,9 @@ internal class S3StorageConfiguration {
 
     @Bean
     fun traceArtifactDeleter(client: S3Client, properties: S3StorageProperties): TraceArtifactDeleter =
+        S3TraceContentStore(client, properties.bucket)
+
+    @Bean
+    fun traceArtifactInspector(client: S3Client, properties: S3StorageProperties): TraceArtifactInspector =
         S3TraceContentStore(client, properties.bucket)
 }

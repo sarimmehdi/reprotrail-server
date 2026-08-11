@@ -18,6 +18,9 @@ import dev.reprotrail.server.security.DeveloperAuthorizer
 import dev.reprotrail.server.security.DeveloperIdentity
 import java.time.Clock
 import dev.reprotrail.server.retention.TraceRetentionCatalog
+import dev.reprotrail.server.reconciliation.TraceArtifactInspection
+import dev.reprotrail.server.reconciliation.TraceArtifactInspector
+import dev.reprotrail.server.reconciliation.TraceReconciliationCatalog
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -104,5 +107,19 @@ class ReproTrailServerApplicationTest {
 
         @Bean
         internal fun traceRetentionCatalog(): TraceRetentionCatalog = TraceRetentionCatalog { _, _ -> emptyList() }
+
+        @Bean
+        internal fun traceArtifactInspector(): TraceArtifactInspector =
+            TraceArtifactInspector { _, _ -> TraceArtifactInspection.Missing }
+
+        @Bean
+        internal fun traceReconciliationCatalog(): TraceReconciliationCatalog =
+            object : TraceReconciliationCatalog {
+                override fun findStale(updatedBefore: java.time.Instant, limit: Int) = emptyList<dev.reprotrail.server.reconciliation.ReconciliationCandidate>()
+
+                override fun markAvailable(projectId: java.util.UUID, sessionId: java.util.UUID) = Unit
+
+                override fun markFailed(projectId: java.util.UUID, sessionId: java.util.UUID) = Unit
+            }
     }
 }
