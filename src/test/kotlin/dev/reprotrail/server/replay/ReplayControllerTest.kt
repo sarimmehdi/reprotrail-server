@@ -42,7 +42,7 @@ class ReplayControllerTest {
     private val workerController =
         WorkerReplayController(
             LeaseNextReplayJob(store, clock, Duration.ofMinutes(2)) { leaseId },
-            ManageReplayLease(store, clock, Duration.ofMinutes(2)),
+            ManageReplayLease(store, clock, Duration.ofMinutes(2)) { _, _, _ -> true },
             DownloadReplayInput(
                 store,
                 TraceArtifactCatalog { _, _ -> TraceArtifactReference("traces/trace.json") },
@@ -50,6 +50,7 @@ class ReplayControllerTest {
                 TraceArtifactReader { reference -> reference.objectKey.encodeToByteArray() },
                 clock,
             ),
+            UploadReplayArtifact(store, InMemoryReplayContentStore(), clock, 1024),
         )
     private val mockMvc = MockMvcBuilders.standaloneSetup(developerController, workerController).build()
 
@@ -164,4 +165,8 @@ private class FakeReplayStore(var active: WorkerReplayLease?) : ReplayJobStore, 
     override fun complete(request: CompleteLeaseRequest): Boolean = active != null
 
     override fun fail(request: FailLeaseRequest): Boolean = active != null
+}
+
+private class InMemoryReplayContentStore : ReplayArtifactContentStore {
+    override fun putIfAbsent(write: ReplayArtifactContentWrite) = ReplayArtifactContentWriteResult.STORED
 }

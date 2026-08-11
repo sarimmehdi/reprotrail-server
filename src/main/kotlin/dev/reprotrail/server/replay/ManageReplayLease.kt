@@ -138,6 +138,7 @@ internal class ManageReplayLease(
     private val store: ReplayLeaseStore,
     private val clock: Clock,
     private val leaseDuration: Duration,
+    private val artifactVerifier: ReplayArtifactVerifier,
 ) {
     init {
         require(leaseDuration in MINIMUM_LEASE..MAXIMUM_LEASE) { "Lease duration must be between 10 seconds and 5 minutes." }
@@ -159,6 +160,7 @@ internal class ManageReplayLease(
         require(completion.passedRepetitions + completion.failedRepetitions == lease.repetitions) {
             "Replay counts must match the leased repetition count."
         }
+        if (completion.artifacts.any { !artifactVerifier.verify(projectId, jobId, it) }) return false
         return store.complete(
             CompleteLeaseRequest(projectId, workerCredentialId, lease.leaseId, lease.jobId, completion, clock.instant()),
         )

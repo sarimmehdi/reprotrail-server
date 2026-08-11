@@ -43,7 +43,7 @@ class ManageReplayLeaseTest {
 
     @Test
     fun `heartbeat extends only the current worker lease`() {
-        val manage = ManageReplayLease(store, Clock.fixed(now, ZoneOffset.UTC), Duration.ofMinutes(2))
+        val manage = ManageReplayLease(store, Clock.fixed(now, ZoneOffset.UTC), Duration.ofMinutes(2)) { _, _, _ -> true }
         store.heartbeatResult = true
 
         assertTrue(manage.heartbeat(projectId, workerId, leaseId))
@@ -52,7 +52,7 @@ class ManageReplayLeaseTest {
 
     @Test
     fun `completion requires counts to match the leased repetitions`() {
-        val manage = ManageReplayLease(store, Clock.fixed(now, ZoneOffset.UTC), Duration.ofMinutes(2))
+        val manage = ManageReplayLease(store, Clock.fixed(now, ZoneOffset.UTC), Duration.ofMinutes(2)) { _, _, _ -> true }
         val lease = replayLease()
         store.active = lease
 

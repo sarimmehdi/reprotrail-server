@@ -44,6 +44,7 @@ internal data class TraceContentWrite(
     val objectKey: String,
     val content: ByteArray,
     val contentSha256: ByteArray,
+    val contentType: String = "application/vnd.reprotrail.trace+json",
 )
 
 internal enum class TraceContentWriteResult {

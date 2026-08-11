@@ -427,7 +427,8 @@ class PostgresCredentialIntegrationTest {
         TraceContentStore,
         TraceArtifactReader,
         TraceArtifactDeleter,
-        TraceArtifactInspector {
+        TraceArtifactInspector,
+        dev.reprotrail.server.replay.ReplayArtifactContentStore {
         private val content = ConcurrentHashMap<String, ByteArray>()
 
         override fun putIfAbsent(write: TraceContentWrite): TraceContentWriteResult {
@@ -439,6 +440,16 @@ class PostgresCredentialIntegrationTest {
                 TraceContentWriteResult.Conflict
             }
         }
+
+        override fun putIfAbsent(
+            write: dev.reprotrail.server.replay.ReplayArtifactContentWrite,
+        ): dev.reprotrail.server.replay.ReplayArtifactContentWriteResult =
+            when (putIfAbsent(TraceContentWrite(write.objectKey, write.content, write.contentSha256, write.contentType))) {
+                TraceContentWriteResult.Stored -> dev.reprotrail.server.replay.ReplayArtifactContentWriteResult.STORED
+                TraceContentWriteResult.AlreadyExists ->
+                    dev.reprotrail.server.replay.ReplayArtifactContentWriteResult.ALREADY_EXISTS
+                TraceContentWriteResult.Conflict -> dev.reprotrail.server.replay.ReplayArtifactContentWriteResult.CONFLICT
+            }
 
         override fun read(reference: TraceArtifactReference): ByteArray? = content[reference.objectKey]?.copyOf()
 

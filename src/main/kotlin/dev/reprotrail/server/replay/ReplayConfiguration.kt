@@ -2,6 +2,8 @@ package dev.reprotrail.server.replay
 
 import dev.reprotrail.server.access.TraceArtifactCatalog
 import dev.reprotrail.server.access.TraceArtifactReader
+import dev.reprotrail.server.reconciliation.TraceArtifactInspection
+import dev.reprotrail.server.reconciliation.TraceArtifactInspector
 import dev.reprotrail.server.access.TraceCatalog
 import java.time.Clock
 import java.time.Duration
@@ -31,7 +33,8 @@ internal class ReplayConfiguration {
         leases: ReplayLeaseStore,
         clock: Clock,
         @Value("\${reprotrail.replay.lease-duration:PT2M}") leaseDuration: Duration,
-    ): ManageReplayLease = ManageReplayLease(leases, clock, leaseDuration)
+        artifactVerifier: ReplayArtifactVerifier,
+    ): ManageReplayLease = ManageReplayLease(leases, clock, leaseDuration, artifactVerifier)
 
     @Bean
     fun downloadReplayInput(
@@ -41,4 +44,20 @@ internal class ReplayConfiguration {
         reader: TraceArtifactReader,
         clock: Clock,
     ): DownloadReplayInput = DownloadReplayInput(leases, traces, applications, reader, clock)
+
+    @Bean
+    fun replayArtifactVerifier(inspector: TraceArtifactInspector): ReplayArtifactVerifier =
+        ReplayArtifactVerifier { projectId, jobId, artifact ->
+            val digest = artifact.sha256.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+            inspector.inspect(replayArtifactReference(projectId, jobId, artifact.name), digest) ==
+                TraceArtifactInspection.Matching
+        }
+
+    @Bean
+    fun uploadReplayArtifact(
+        leases: ReplayLeaseStore,
+        contentStore: ReplayArtifactContentStore,
+        clock: Clock,
+        @Value("\${reprotrail.replay.max-artifact-bytes:5242880}") maxArtifactBytes: Long,
+    ): UploadReplayArtifact = UploadReplayArtifact(leases, contentStore, clock, maxArtifactBytes)
 }

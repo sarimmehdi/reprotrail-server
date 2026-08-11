@@ -14,6 +14,7 @@ reprotrail:
     reconciliation-batch-size: 100
   replay:
     lease-duration: PT2M
+    max-artifact-bytes: 5242880
 
 management:
   endpoints:

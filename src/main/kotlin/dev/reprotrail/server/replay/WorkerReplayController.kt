@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestHeader
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
@@ -21,6 +23,7 @@ internal class WorkerReplayController(
     private val leaseNext: LeaseNextReplayJob,
     private val manage: ManageReplayLease,
     private val download: DownloadReplayInput,
+    private val upload: UploadReplayArtifact,
 ) {
     @PostMapping("/lease")
     fun lease(
@@ -105,6 +108,30 @@ internal class WorkerReplayController(
         @PathVariable leaseId: UUID,
         principal: Principal,
     ): ResponseEntity<Any> = input(projectId, jobId, leaseId, principal, ReplayInputKind.APPLICATION)
+
+    @PutMapping("/{jobId}/leases/{leaseId}/artifacts/{name}", consumes = [MediaType.APPLICATION_OCTET_STREAM_VALUE])
+    fun artifact(
+        @PathVariable projectId: UUID,
+        @PathVariable jobId: UUID,
+        @PathVariable leaseId: UUID,
+        @PathVariable name: String,
+        @RequestHeader("X-ReproTrail-Artifact-Kind") kindValue: String,
+        @RequestBody content: ByteArray,
+        principal: Principal,
+    ): ResponseEntity<Any> {
+        val identity = principal.workerIdentity() ?: return unauthorized()
+        val kind = runCatching { ReplayArtifactKind.valueOf(kindValue.uppercase()) }.getOrElse { return invalidRequest() }
+        return when (val result = upload(projectId, identity.credentialId, jobId, leaseId, kind, name, content)) {
+            is ReplayArtifactUploadResult.Stored -> ResponseEntity.ok(result.receipt)
+            ReplayArtifactUploadResult.NotActive -> conflict()
+            ReplayArtifactUploadResult.TooLarge ->
+                ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                    .body(ReplayErrorResponse("artifact_too_large", "Replay artifact exceeds the size limit."))
+            ReplayArtifactUploadResult.Conflict ->
+                ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ReplayErrorResponse("artifact_conflict", "Replay artifact name already has different content."))
+        }
+    }
 
     private fun input(
         projectId: UUID,

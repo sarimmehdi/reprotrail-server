@@ -130,6 +130,12 @@ class ReproTrailServerApplicationTest {
 
         @Bean
         internal fun replayStore(): FakeReplayStore = FakeReplayStore()
+
+        @Bean
+        internal fun replayArtifactContentStore(): dev.reprotrail.server.replay.ReplayArtifactContentStore =
+            dev.reprotrail.server.replay.ReplayArtifactContentStore {
+                dev.reprotrail.server.replay.ReplayArtifactContentWriteResult.STORED
+            }
     }
 
     internal class FakeReplayStore :

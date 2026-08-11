@@ -8,6 +8,9 @@ import dev.reprotrail.server.reconciliation.TraceArtifactInspector
 import dev.reprotrail.server.persistence.TraceContentStore
 import dev.reprotrail.server.persistence.TraceContentWrite
 import dev.reprotrail.server.persistence.TraceContentWriteResult
+import dev.reprotrail.server.replay.ReplayArtifactContentStore
+import dev.reprotrail.server.replay.ReplayArtifactContentWrite
+import dev.reprotrail.server.replay.ReplayArtifactContentWriteResult
 import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
@@ -19,7 +22,7 @@ import software.amazon.awssdk.services.s3.model.S3Exception
 internal class S3TraceContentStore(
     private val client: S3Client,
     private val bucket: String,
-) : TraceContentStore, TraceArtifactReader, TraceArtifactDeleter, TraceArtifactInspector {
+) : TraceContentStore, TraceArtifactReader, TraceArtifactDeleter, TraceArtifactInspector, ReplayArtifactContentStore {
     override fun putIfAbsent(write: TraceContentWrite): TraceContentWriteResult {
         var lastConflict: S3Exception? = null
         repeat(MAX_CONDITIONAL_ATTEMPTS) { attempt ->
@@ -28,7 +31,7 @@ internal class S3TraceContentStore(
                     PutObjectRequest.builder()
                         .bucket(bucket)
                         .key(write.objectKey)
-                        .contentType("application/vnd.reprotrail.trace+json")
+                        .contentType(write.contentType)
                         .contentLength(write.content.size.toLong())
                         .metadata(mapOf(CONTENT_SHA256_METADATA to write.contentSha256.toHex()))
                         .ifNoneMatch("*")
@@ -51,6 +54,17 @@ internal class S3TraceContentStore(
         }
         throw checkNotNull(lastConflict)
     }
+
+    override fun putIfAbsent(write: ReplayArtifactContentWrite): ReplayArtifactContentWriteResult =
+        when (
+            putIfAbsent(
+                TraceContentWrite(write.objectKey, write.content, write.contentSha256, write.contentType),
+            )
+        ) {
+            TraceContentWriteResult.Stored -> ReplayArtifactContentWriteResult.STORED
+            TraceContentWriteResult.AlreadyExists -> ReplayArtifactContentWriteResult.ALREADY_EXISTS
+            TraceContentWriteResult.Conflict -> ReplayArtifactContentWriteResult.CONFLICT
+        }
 
     override fun read(reference: TraceArtifactReference): ByteArray? =
         try {
