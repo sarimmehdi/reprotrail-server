@@ -2,6 +2,10 @@ spring:
   application:
     name: reprotrail-server
 
+reprotrail:
+  ingest:
+    max-trace-bytes: 1048576
+
 management:
   endpoints:
     web:

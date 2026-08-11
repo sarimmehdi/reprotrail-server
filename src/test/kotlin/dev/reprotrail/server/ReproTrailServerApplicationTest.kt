@@ -12,6 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.security.web.SecurityFilterChain
 
 @SpringBootTest(
     properties = [
@@ -25,9 +26,13 @@ class ReproTrailServerApplicationTest {
     @Autowired
     private lateinit var traceIngestor: TraceIngestor
 
+    @Autowired
+    private lateinit var securityFilterChain: SecurityFilterChain
+
     @Test
     fun `application composes the trace ingestion boundary`() {
         assertNotNull(traceIngestor)
+        assertNotNull(securityFilterChain)
     }
 
     @TestConfiguration
