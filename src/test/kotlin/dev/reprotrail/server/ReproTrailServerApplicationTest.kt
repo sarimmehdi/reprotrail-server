@@ -13,6 +13,7 @@ import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.security.web.SecurityFilterChain
+import org.springframework.test.context.ActiveProfiles
 
 @SpringBootTest(
     properties = [
@@ -22,6 +23,7 @@ import org.springframework.security.web.SecurityFilterChain
     ],
 )
 @Import(ReproTrailServerApplicationTest.InfrastructureTestConfiguration::class)
+@ActiveProfiles("test")
 class ReproTrailServerApplicationTest {
     @Autowired
     private lateinit var traceIngestor: TraceIngestor
