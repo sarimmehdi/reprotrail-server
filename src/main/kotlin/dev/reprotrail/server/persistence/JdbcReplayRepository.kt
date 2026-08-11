@@ -117,6 +117,8 @@ internal class JdbcReplayRepository(
                 updated_at = :now
             from candidate
             where job.project_id = :projectId and job.id = candidate.id
+              and job.attempt_count < job.max_attempts
+              and (job.state = 'queued' or (job.state = 'leased' and job.lease_expires_at <= :now))
             returning job.lease_id, job.id, job.project_id, job.trace_id,
                       job.application_artifact_id, job.package_name, job.repetitions,
                       job.attempt_timeout_seconds, job.lease_expires_at
