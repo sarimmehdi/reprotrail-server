@@ -1,5 +1,6 @@
 package dev.reprotrail.server.storage
 
+import dev.reprotrail.server.access.TraceArtifactReader
 import dev.reprotrail.server.persistence.TraceContentStore
 import java.net.URI
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -50,5 +51,9 @@ internal class S3StorageConfiguration {
 
     @Bean
     fun traceContentStore(client: S3Client, properties: S3StorageProperties): TraceContentStore =
+        S3TraceContentStore(client, properties.bucket)
+
+    @Bean
+    fun traceArtifactReader(client: S3Client, properties: S3StorageProperties): TraceArtifactReader =
         S3TraceContentStore(client, properties.bucket)
 }

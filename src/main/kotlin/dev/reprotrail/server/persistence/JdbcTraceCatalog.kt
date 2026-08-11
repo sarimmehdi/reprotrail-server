@@ -1,6 +1,8 @@
 package dev.reprotrail.server.persistence
 
 import dev.reprotrail.server.access.TraceCatalog
+import dev.reprotrail.server.access.TraceArtifactCatalog
+import dev.reprotrail.server.access.TraceArtifactReference
 import dev.reprotrail.server.access.TraceMetadata
 import dev.reprotrail.server.access.TracePage
 import dev.reprotrail.server.access.TracePageCursor
@@ -12,7 +14,7 @@ import org.springframework.jdbc.core.simple.JdbcClient
 
 internal class JdbcTraceCatalog(
     private val jdbc: JdbcClient,
-) : TraceCatalog {
+) : TraceCatalog, TraceArtifactCatalog {
     override fun list(projectId: UUID, cursor: TracePageCursor?, limit: Int): TracePage {
         val rows =
             jdbc.sql(
@@ -57,6 +59,20 @@ internal class JdbcTraceCatalog(
             .param("sessionId", sessionId)
             .query(::mapMetadata)
             .optional()
+            .orElse(null)
+
+    override fun findAvailable(projectId: UUID, sessionId: UUID): TraceArtifactReference? =
+        jdbc.sql(
+            """
+            select object_key
+            from traces
+            where project_id = :projectId and session_id = :sessionId and storage_state = 'available'
+            """.trimIndent(),
+        ).param("projectId", projectId)
+            .param("sessionId", sessionId)
+            .query(String::class.java)
+            .optional()
+            .map(::TraceArtifactReference)
             .orElse(null)
 }
 

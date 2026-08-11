@@ -1,5 +1,6 @@
 package dev.reprotrail.server.storage
 
+import dev.reprotrail.server.access.TraceArtifactReference
 import dev.reprotrail.server.persistence.TraceContentWrite
 import dev.reprotrail.server.persistence.TraceContentWriteResult
 import java.net.URI
@@ -59,6 +60,8 @@ class S3TraceContentStoreIntegrationTest {
                 ResponseTransformer.toBytes(),
             ).asByteArray()
         assertArrayEquals(original, stored)
+        assertArrayEquals(original, store.read(TraceArtifactReference(objectKey)))
+        assertEquals(null, store.read(TraceArtifactReference("missing.json")))
     }
 
     private fun write(objectKey: String, content: ByteArray) =

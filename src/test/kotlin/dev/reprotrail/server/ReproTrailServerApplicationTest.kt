@@ -1,6 +1,9 @@
 package dev.reprotrail.server
 
 import dev.reprotrail.server.access.TraceCatalog
+import dev.reprotrail.server.access.TraceArtifactCatalog
+import dev.reprotrail.server.access.TraceArtifactReader
+import dev.reprotrail.server.access.TraceAuditLog
 import dev.reprotrail.server.access.TraceMetadata
 import dev.reprotrail.server.access.TracePage
 import dev.reprotrail.server.access.TracePageCursor
@@ -11,6 +14,7 @@ import dev.reprotrail.server.ingest.TraceIngestor
 import dev.reprotrail.server.ingest.TraceRepository
 import dev.reprotrail.server.security.DeveloperAuthorizer
 import dev.reprotrail.server.security.DeveloperIdentity
+import java.time.Clock
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -69,5 +73,17 @@ class ReproTrailServerApplicationTest {
 
                 override fun find(projectId: java.util.UUID, sessionId: java.util.UUID): TraceMetadata? = null
             }
+
+        @Bean
+        internal fun traceArtifactCatalog(): TraceArtifactCatalog = TraceArtifactCatalog { _, _ -> null }
+
+        @Bean
+        internal fun traceArtifactReader(): TraceArtifactReader = TraceArtifactReader { null }
+
+        @Bean
+        internal fun traceAuditLog(): TraceAuditLog = TraceAuditLog { }
+
+        @Bean
+        internal fun applicationClock(): Clock = Clock.systemUTC()
     }
 }

@@ -4,6 +4,7 @@ import java.time.Instant
 import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 
@@ -22,7 +23,8 @@ class TraceAccessControllerTest {
             createdAt = Instant.parse("2026-08-11T12:00:02Z"),
         )
     private val browser = RecordingBrowser(trace)
-    private val mockMvc = MockMvcBuilders.standaloneSetup(TraceAccessController(browser)).build()
+    private val downloader = RecordingDownloader()
+    private val mockMvc = MockMvcBuilders.standaloneSetup(TraceAccessController(browser, downloader)).build()
 
     @Test
     fun `list returns metadata and an opaque continuation cursor`() {
@@ -63,6 +65,27 @@ class TraceAccessControllerTest {
         assertEquals(0, browser.listCalls)
     }
 
+    @Test
+    fun `content download returns the immutable media type and attachment`() {
+        downloader.result = TraceDownloadResult.Found("{\"trace\":true}".encodeToByteArray())
+        val identity = dev.reprotrail.server.security.DeveloperIdentity(projectId, sessionId)
+        val developerAuthentication = UsernamePasswordAuthenticationToken.authenticated(identity, null, emptyList())
+
+        mockMvc.get("/v1/projects/$projectId/traces/$sessionId/content") {
+            with { request ->
+                request.userPrincipal = developerAuthentication
+                request
+            }
+        }.andExpect {
+            status { isOk() }
+            content { contentType("application/vnd.reprotrail.trace+json") }
+            content { bytes("{\"trace\":true}".encodeToByteArray()) }
+            header { string("Content-Disposition", "attachment; filename=\"reprotrail-$sessionId.json\"") }
+        }
+
+        assertEquals(Triple(projectId, sessionId, sessionId), downloader.lastRequest)
+    }
+
     private class RecordingBrowser(initialTrace: TraceMetadata) : TraceBrowser {
         var nextPage = TracePage(emptyList(), null)
         var found: TraceMetadata? = initialTrace
@@ -76,5 +99,15 @@ class TraceAccessControllerTest {
         }
 
         override fun find(projectId: UUID, sessionId: UUID): TraceMetadata? = found
+    }
+
+    private class RecordingDownloader : TraceDownloader {
+        var result: TraceDownloadResult = TraceDownloadResult.NotFound
+        var lastRequest: Triple<UUID, UUID, UUID>? = null
+
+        override fun download(projectId: UUID, sessionId: UUID, actorCredentialId: UUID): TraceDownloadResult {
+            lastRequest = Triple(projectId, sessionId, actorCredentialId)
+            return result
+        }
     }
 }

@@ -1,6 +1,10 @@
 package dev.reprotrail.server.persistence
 
 import dev.reprotrail.server.access.TraceCatalog
+import dev.reprotrail.server.access.TraceArtifactCatalog
+import dev.reprotrail.server.access.TraceAuditAction
+import dev.reprotrail.server.access.TraceAuditEvent
+import dev.reprotrail.server.access.TraceAuditLog
 import dev.reprotrail.server.contract.ValidatedTraceMetadata
 import dev.reprotrail.server.ingest.StoredTrace
 import dev.reprotrail.server.ingest.TraceRepository
@@ -61,6 +65,12 @@ class PostgresCredentialIntegrationTest {
 
     @Autowired
     private lateinit var traceCatalog: TraceCatalog
+
+    @Autowired
+    private lateinit var traceArtifactCatalog: TraceArtifactCatalog
+
+    @Autowired
+    private lateinit var traceAuditLog: TraceAuditLog
 
     @Autowired
     private lateinit var contentStore: InMemoryTraceContentStore
@@ -170,6 +180,37 @@ class PostgresCredentialIntegrationTest {
             null,
             traceCatalog.find(UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f499"), newestId),
         )
+    }
+
+    @Test
+    fun `artifact lookup and audit persistence retain tenant and actor identity`() {
+        insertTrace(traceSessionId, "2026-08-11T12:00:00Z", "available")
+        traceAuditLog.append(
+            TraceAuditEvent(
+                projectId = projectId,
+                traceId = traceSessionId,
+                actorCredentialId = credentialId,
+                action = TraceAuditAction.Downloaded,
+                occurredAt = Instant.parse("2026-08-11T12:01:00Z"),
+            ),
+        )
+
+        val reference = traceArtifactCatalog.findAvailable(projectId, traceSessionId)
+        val auditAction =
+            jdbc.sql(
+                """
+                select action
+                from audit_events
+                where project_id = :projectId and trace_id = :traceId and actor_credential_id = :actorId
+                """.trimIndent(),
+            ).param("projectId", projectId)
+                .param("traceId", traceSessionId)
+                .param("actorId", credentialId)
+                .query(String::class.java)
+                .single()
+
+        assertEquals("projects/$projectId/traces/$traceSessionId.json", reference?.objectKey)
+        assertEquals("downloaded", auditAction)
     }
 
     @Test

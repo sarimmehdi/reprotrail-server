@@ -1,18 +1,21 @@
 package dev.reprotrail.server.storage
 
+import dev.reprotrail.server.access.TraceArtifactReader
+import dev.reprotrail.server.access.TraceArtifactReference
 import dev.reprotrail.server.persistence.TraceContentStore
 import dev.reprotrail.server.persistence.TraceContentWrite
 import dev.reprotrail.server.persistence.TraceContentWriteResult
 import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
+import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.model.S3Exception
 
 internal class S3TraceContentStore(
     private val client: S3Client,
     private val bucket: String,
-) : TraceContentStore {
+) : TraceContentStore, TraceArtifactReader {
     override fun putIfAbsent(write: TraceContentWrite): TraceContentWriteResult {
         var lastConflict: S3Exception? = null
         repeat(MAX_CONDITIONAL_ATTEMPTS) { attempt ->
@@ -45,6 +48,15 @@ internal class S3TraceContentStore(
         throw checkNotNull(lastConflict)
     }
 
+    override fun read(reference: TraceArtifactReference): ByteArray? =
+        try {
+            client.getObjectAsBytes(
+                GetObjectRequest.builder().bucket(bucket).key(reference.objectKey).build(),
+            ).asByteArray()
+        } catch (failure: S3Exception) {
+            if (failure.statusCode() == NOT_FOUND) null else throw failure
+        }
+
     private fun inspectExistingOrThrow(
         write: TraceContentWrite,
         conflict: S3Exception,
@@ -76,6 +88,7 @@ internal class S3TraceContentStore(
         const val CONTENT_SHA256_METADATA = "reprotrail-sha256"
         const val PRECONDITION_FAILED = 412
         const val CONDITIONAL_CONFLICT = 409
+        const val NOT_FOUND = 404
         const val MAX_CONDITIONAL_ATTEMPTS = 3
     }
 }
