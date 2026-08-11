@@ -53,9 +53,11 @@ class ManageReplayLeaseTest {
     @Test
     fun `completion requires counts to match the leased repetitions`() {
         val manage = ManageReplayLease(store, Clock.fixed(now, ZoneOffset.UTC), Duration.ofMinutes(2))
+        val lease = replayLease()
+        store.active = lease
 
         assertFailsWith<IllegalArgumentException> {
-            manage.complete(projectId, workerId, replayLease(), ReplayCompletion(2, 0, emptyList()))
+            manage.complete(projectId, workerId, lease.jobId, lease.leaseId, ReplayCompletion(2, 0, emptyList()))
         }
     }
 
@@ -78,6 +80,7 @@ private class RecordingLeaseStore : ReplayLeaseStore {
     var lastLease: LeaseRequest? = null
     var lastHeartbeat: LeaseHeartbeat? = null
     var heartbeatResult = false
+    var active: WorkerReplayLease? = null
 
     override fun lease(request: LeaseRequest): WorkerReplayLease? {
         lastLease = request
@@ -88,6 +91,14 @@ private class RecordingLeaseStore : ReplayLeaseStore {
         lastHeartbeat = request
         return heartbeatResult
     }
+
+    override fun findActive(
+        projectId: UUID,
+        workerCredentialId: UUID,
+        jobId: UUID,
+        leaseId: UUID,
+        now: Instant,
+    ): WorkerReplayLease? = active
 
     override fun complete(request: CompleteLeaseRequest): Boolean = true
 

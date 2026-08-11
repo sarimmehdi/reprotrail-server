@@ -119,6 +119,31 @@ internal class JdbcReplayRepository(
             .param("expiresAt", request.expiresAt.atOffset(ZoneOffset.UTC))
             .update() == 1
 
+    override fun findActive(
+        projectId: UUID,
+        workerCredentialId: UUID,
+        jobId: UUID,
+        leaseId: UUID,
+        now: java.time.Instant,
+    ): WorkerReplayLease? =
+        jdbc.sql(
+            """
+            select lease_id, id, project_id, trace_id, application_artifact_id,
+                   package_name, repetitions, attempt_timeout_seconds, lease_expires_at
+            from replay_jobs
+            where project_id = :projectId and id = :jobId and lease_id = :leaseId
+              and lease_owner_credential_id = :workerId and state = 'leased'
+              and lease_expires_at > :now
+            """.trimIndent(),
+        ).param("projectId", projectId)
+            .param("jobId", jobId)
+            .param("leaseId", leaseId)
+            .param("workerId", workerCredentialId)
+            .param("now", now.atOffset(ZoneOffset.UTC))
+            .query(::mapLease)
+            .optional()
+            .orElse(null)
+
     override fun complete(request: CompleteLeaseRequest): Boolean =
         transactions.execute {
             val updated =

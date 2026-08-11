@@ -105,6 +105,14 @@ internal interface ReplayLeaseStore {
 
     fun heartbeat(request: LeaseHeartbeat): Boolean
 
+    fun findActive(
+        projectId: UUID,
+        workerCredentialId: UUID,
+        jobId: UUID,
+        leaseId: UUID,
+        now: Instant,
+    ): WorkerReplayLease?
+
     fun complete(request: CompleteLeaseRequest): Boolean
 
     fun fail(request: FailLeaseRequest): Boolean
@@ -143,9 +151,11 @@ internal class ManageReplayLease(
     fun complete(
         projectId: UUID,
         workerCredentialId: UUID,
-        lease: WorkerReplayLease,
+        jobId: UUID,
+        leaseId: UUID,
         completion: ReplayCompletion,
     ): Boolean {
+        val lease = store.findActive(projectId, workerCredentialId, jobId, leaseId, clock.instant()) ?: return false
         require(completion.passedRepetitions + completion.failedRepetitions == lease.repetitions) {
             "Replay counts must match the leased repetition count."
         }
@@ -157,10 +167,14 @@ internal class ManageReplayLease(
     fun fail(
         projectId: UUID,
         workerCredentialId: UUID,
-        lease: WorkerReplayLease,
+        jobId: UUID,
+        leaseId: UUID,
         failure: WorkerReplayFailure,
-    ): Boolean =
-        store.fail(FailLeaseRequest(projectId, workerCredentialId, lease.leaseId, lease.jobId, failure, clock.instant()))
+    ): Boolean {
+        val now = clock.instant()
+        val lease = store.findActive(projectId, workerCredentialId, jobId, leaseId, now) ?: return false
+        return store.fail(FailLeaseRequest(projectId, workerCredentialId, lease.leaseId, lease.jobId, failure, now))
+    }
 }
 
 private val MINIMUM_LEASE: Duration = Duration.ofSeconds(10)
