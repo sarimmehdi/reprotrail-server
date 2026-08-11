@@ -71,6 +71,6 @@ class S3TraceContentStoreIntegrationTest {
     companion object {
         @Container
         @JvmStatic
-        val minio = MinIOContainer("minio/minio:RELEASE.2023-09-04T19-57-37Z")
+        val minio = MinIOContainer("minio/minio:RELEASE.2025-09-07T16-13-09Z")
     }
 }
