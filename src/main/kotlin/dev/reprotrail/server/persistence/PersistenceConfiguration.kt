@@ -1,8 +1,6 @@
 package dev.reprotrail.server.persistence
 
 import dev.reprotrail.server.ingest.TraceRepository
-import dev.reprotrail.server.access.TraceCatalog
-import dev.reprotrail.server.access.TraceArtifactCatalog
 import dev.reprotrail.server.access.TraceAuditLog
 import dev.reprotrail.server.access.TraceDeletionCatalog
 import dev.reprotrail.server.security.DeveloperCredentialLookup
@@ -39,12 +37,6 @@ internal class PersistenceConfiguration {
 
     @Bean
     fun jdbcTraceCatalog(jdbc: JdbcClient): JdbcTraceCatalog = JdbcTraceCatalog(jdbc)
-
-    @Bean
-    fun traceCatalog(catalog: JdbcTraceCatalog): TraceCatalog = catalog
-
-    @Bean
-    fun traceArtifactCatalog(catalog: JdbcTraceCatalog): TraceArtifactCatalog = catalog
 
     @Bean
     fun traceAuditLog(jdbc: JdbcClient): TraceAuditLog = JdbcTraceAuditLog(jdbc)
