@@ -1,5 +1,6 @@
 package dev.reprotrail.server.persistence
 
+import dev.reprotrail.server.ingest.TraceRepository
 import dev.reprotrail.server.security.HmacTokenDigester
 import dev.reprotrail.server.security.IngestCredentialLookup
 import dev.reprotrail.server.security.SecureIngestAuthorizer
@@ -19,6 +20,15 @@ internal class PersistenceConfiguration {
 
     @Bean
     fun ingestCredentialLookup(jdbc: JdbcClient): IngestCredentialLookup = JdbcIngestCredentialLookup(jdbc)
+
+    @Bean
+    fun traceMetadataStore(jdbc: JdbcClient): TraceMetadataStore = JdbcTraceMetadataStore(jdbc)
+
+    @Bean
+    fun traceRepository(
+        metadataStore: TraceMetadataStore,
+        contentStore: TraceContentStore,
+    ): TraceRepository = PersistentTraceRepository(metadataStore, contentStore)
 
     @Bean
     fun hmacTokenDigester(

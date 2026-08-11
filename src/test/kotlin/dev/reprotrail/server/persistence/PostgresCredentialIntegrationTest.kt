@@ -1,12 +1,16 @@
 package dev.reprotrail.server.persistence
 
+import dev.reprotrail.server.contract.ValidatedTraceMetadata
 import dev.reprotrail.server.ingest.StoredTrace
-import dev.reprotrail.server.ingest.TraceCreateResult
 import dev.reprotrail.server.ingest.TraceRepository
 import dev.reprotrail.server.security.HmacTokenDigester
 import dev.reprotrail.server.security.IngestCredentialLookup
 import dev.reprotrail.server.security.SecureIngestAuthorizer
 import java.time.Instant
+import java.time.ZoneOffset
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.Base64
 import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertArrayEquals
@@ -47,6 +51,12 @@ class PostgresCredentialIntegrationTest {
     @Autowired
     private lateinit var authorizer: SecureIngestAuthorizer
 
+    @Autowired
+    private lateinit var traceRepository: TraceRepository
+
+    @Autowired
+    private lateinit var contentStore: InMemoryTraceContentStore
+
     private val projectId = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f400")
     private val credentialId = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f401")
     private val secret = Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(32) { it.toByte() })
@@ -57,6 +67,7 @@ class PostgresCredentialIntegrationTest {
         jdbc.sql("delete from traces").update()
         jdbc.sql("delete from ingest_credentials").update()
         jdbc.sql("delete from projects").update()
+        contentStore.clear()
         jdbc.sql("insert into projects (id, name) values (:id, :name)")
             .param("id", projectId)
             .param("name", "Integration test")
@@ -103,6 +114,56 @@ class PostgresCredentialIntegrationTest {
         assertFalse(authorizer.isAuthorized(projectId, "rt_ingest_$credentialId.${secret.reversed()}"))
     }
 
+    @Test
+    fun `trace idempotency is atomic under concurrent retries`() {
+        val start = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val futures = List(2) {
+                executor.submit<dev.reprotrail.server.ingest.TraceCreateResult> {
+                    start.await()
+                    traceRepository.create(storedTrace())
+                }
+            }
+            start.countDown()
+
+            val outcomes = futures.map { it.get() }.toSet()
+            val rowCount =
+                jdbc.sql("select count(*) from traces where project_id = :projectId")
+                    .param("projectId", projectId)
+                    .query(Int::class.java)
+                    .single()
+
+            assertEquals(
+                setOf(
+                    dev.reprotrail.server.ingest.TraceCreateResult.Created,
+                    dev.reprotrail.server.ingest.TraceCreateResult.AlreadyExists,
+                ),
+                outcomes,
+            )
+            assertEquals(1, rowCount)
+            assertEquals(1, contentStore.size())
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `reusing an idempotency key for different bytes conflicts`() {
+        assertEquals(
+            dev.reprotrail.server.ingest.TraceCreateResult.Created,
+            traceRepository.create(storedTrace()),
+        )
+
+        val changed = storedTrace().copy(contentSha256 = ByteArray(32) { 9 }, content = "changed".encodeToByteArray())
+
+        assertEquals(
+            dev.reprotrail.server.ingest.TraceCreateResult.Conflict,
+            traceRepository.create(changed),
+        )
+        assertEquals(1, contentStore.size())
+    }
+
     private fun insertCredential(digest: ByteArray, expiresAt: Instant?) {
         jdbc.sql(
             """
@@ -112,17 +173,50 @@ class PostgresCredentialIntegrationTest {
         ).param("id", credentialId)
             .param("projectId", projectId)
             .param("tokenDigest", digest)
-            .param("expiresAt", expiresAt)
+            .param("expiresAt", expiresAt?.atOffset(ZoneOffset.UTC))
             .update()
     }
+
+    private fun storedTrace() =
+        StoredTrace(
+            projectId = projectId,
+            idempotencyKey = traceSessionId,
+            metadata =
+                ValidatedTraceMetadata(
+                    schemaVersion = "1.0.0-alpha.1",
+                    sessionId = traceSessionId,
+                    startedAt = Instant.parse("2026-08-11T12:00:00Z"),
+                    endedAt = null,
+                    packageName = "dev.reprotrail.fixture",
+                    captureMode = "internal",
+                    actionCount = 1,
+                ),
+            content = "{\"trace\":true}".encodeToByteArray(),
+            contentSha256 = ByteArray(32) { it.toByte() },
+        )
 
     @TestConfiguration(proxyBeanMethods = false)
     class TestAdapters {
         @Bean
-        internal fun traceRepository(): TraceRepository =
-            object : TraceRepository {
-                override fun create(record: StoredTrace): TraceCreateResult = TraceCreateResult.Created
+        internal fun traceContentStore(): InMemoryTraceContentStore = InMemoryTraceContentStore()
+    }
+
+    internal class InMemoryTraceContentStore : TraceContentStore {
+        private val content = ConcurrentHashMap<String, ByteArray>()
+
+        override fun putIfAbsent(write: TraceContentWrite): TraceContentWriteResult {
+            val existing = content.putIfAbsent(write.objectKey, write.content.copyOf())
+                ?: return TraceContentWriteResult.Stored
+            return if (existing.contentEquals(write.content)) {
+                TraceContentWriteResult.AlreadyExists
+            } else {
+                TraceContentWriteResult.Conflict
             }
+        }
+
+        fun clear() = content.clear()
+
+        fun size(): Int = content.size
     }
 
     companion object {
@@ -130,5 +224,7 @@ class PostgresCredentialIntegrationTest {
         @ServiceConnection
         @JvmStatic
         val postgres = PostgreSQLContainer("postgres:17-alpine")
+
+        val traceSessionId: UUID = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f441")
     }
 }
