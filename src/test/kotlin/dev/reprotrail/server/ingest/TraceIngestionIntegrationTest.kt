@@ -21,6 +21,8 @@ import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.delete
+import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import org.testcontainers.containers.MinIOContainer
 import org.testcontainers.junit.jupiter.Container
@@ -51,6 +53,7 @@ class TraceIngestionIntegrationTest {
     fun seedProjectCredential() {
         jdbc.sql("delete from audit_events").update()
         jdbc.sql("delete from traces").update()
+        jdbc.sql("delete from developer_credentials").update()
         jdbc.sql("delete from ingest_credentials").update()
         jdbc.sql("delete from projects").update()
         jdbc.sql("insert into projects (id, name) values (:id, :name)")
@@ -65,6 +68,16 @@ class TraceIngestionIntegrationTest {
         ).param("id", credentialId)
             .param("projectId", projectId)
             .param("digest", digester.digest(secret))
+            .param("expiresAt", Instant.parse("2030-01-01T00:00:00Z").atOffset(ZoneOffset.UTC))
+            .update()
+        jdbc.sql(
+            """
+            insert into developer_credentials (id, project_id, token_digest, expires_at)
+            values (:id, :projectId, :digest, :expiresAt)
+            """.trimIndent(),
+        ).param("id", developerCredentialId)
+            .param("projectId", projectId)
+            .param("digest", digester.digest(developerSecret))
             .param("expiresAt", Instant.parse("2030-01-01T00:00:00Z").atOffset(ZoneOffset.UTC))
             .update()
     }
@@ -132,6 +145,46 @@ class TraceIngestionIntegrationTest {
         assertArrayEquals(validTrace().encodeToByteArray(), storedContent)
     }
 
+    @Test
+    fun `developer can browse download and delete only through audited authority`() {
+        authorizedIngest(validTrace()).andExpect { status { isCreated() } }
+
+        mockMvc.get(traceCollectionPath) {
+            header("Authorization", "Bearer $developerToken")
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.items[0].sessionId") { value(sessionId.toString()) }
+        }
+        mockMvc.get("$traceCollectionPath/$sessionId/content") {
+            header("Authorization", "Bearer $developerToken")
+        }.andExpect {
+            status { isOk() }
+            content { bytes(validTrace().encodeToByteArray()) }
+        }
+        mockMvc.delete("$traceCollectionPath/$sessionId") {
+            header("Authorization", "Bearer $developerToken")
+        }.andExpect { status { isNoContent() } }
+        mockMvc.get("$traceCollectionPath/$sessionId/content") {
+            header("Authorization", "Bearer $developerToken")
+        }.andExpect { status { isNotFound() } }
+
+        val auditActions =
+            jdbc.sql(
+                """
+                select action
+                from audit_events
+                where project_id = :projectId and trace_id = :traceId and actor_credential_id = :actorId
+                order by occurred_at
+                """.trimIndent(),
+            ).param("projectId", projectId)
+                .param("traceId", sessionId)
+                .param("actorId", developerCredentialId)
+                .query(String::class.java)
+                .list()
+        assertEquals(listOf("downloaded", "deleted"), auditActions)
+        assertEquals(0, traceCount())
+    }
+
     private fun authorizedIngest(body: String) =
         mockMvc.post(traceCollectionPath) {
             header("Authorization", "Bearer $token")
@@ -152,6 +205,9 @@ class TraceIngestionIntegrationTest {
     private val token: String
         get() = "rt_ingest_$credentialId.$secret"
 
+    private val developerToken: String
+        get() = "rt_dev_$developerCredentialId.$developerSecret"
+
     private val traceCollectionPath: String
         get() = "/v1/projects/$projectId/traces"
 
@@ -160,9 +216,12 @@ class TraceIngestionIntegrationTest {
         private const val PEPPER_BASE64 = "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
         private val projectId: UUID = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f400")
         private val credentialId: UUID = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f401")
+        private val developerCredentialId: UUID = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f402")
         private val sessionId: UUID = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f441")
         private val secret: String =
             Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(32) { it.toByte() })
+        private val developerSecret: String =
+            Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(32) { (it + 32).toByte() })
         private val bucket = "reprotrail-integration-${UUID.randomUUID()}"
 
         @Container

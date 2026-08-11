@@ -23,16 +23,20 @@ ReproTrail Server consumes the tagged [`reprotrail-spec`](https://github.com/sar
 | Method and path | Status | Authority | Outcome |
 | --- | --- | --- | --- |
 | `POST /v1/projects/{projectId}/traces` | Implemented | Project ingest token | Validate and idempotently store one immutable trace |
-| `GET /v1/projects/{projectId}/traces` | Planned | Project developer token | List tenant-scoped trace metadata |
-| `GET /v1/projects/{projectId}/traces/{traceId}` | Planned | Project developer token | Read trace metadata |
-| `GET /v1/projects/{projectId}/traces/{traceId}/content` | Planned | Project developer token | Download the immutable trace |
-| `DELETE /v1/projects/{projectId}/traces/{traceId}` | Planned | Project developer token | Delete metadata and content while retaining an audit tombstone |
+| `GET /v1/projects/{projectId}/traces` | Implemented | Project developer token | List available tenant-scoped metadata with bounded keyset pagination |
+| `GET /v1/projects/{projectId}/traces/{traceId}` | Implemented | Project developer token | Read available trace metadata |
+| `GET /v1/projects/{projectId}/traces/{traceId}/content` | Implemented | Project developer token | Download and audit access to the immutable trace |
+| `DELETE /v1/projects/{projectId}/traces/{traceId}` | Implemented | Project developer token | Delete metadata and content while retaining an audit tombstone |
 
 Retries use the trace session UUID as `Idempotency-Key`. Reusing a key with different bytes is rejected. Ingest credentials never grant read, replay, administration, or deletion access.
 
 Bearer credentials use `rt_ingest_<credential-uuid>.<base64url-secret>`. Only an HMAC-SHA-256 digest is stored in PostgreSQL; the raw token and server-side pepper must never be persisted or logged by this service.
 
+Developer credentials use the separate `rt_dev_<credential-uuid>.<base64url-secret>` prefix and `developer_credentials` table. They grant project-scoped read, download, and delete authority but never ingestion authority. Downloads and deletions retain the acting developer credential ID in append-oriented audit events. List cursors are opaque and clients must not construct or edit them.
+
 Authentication and the configured request-size limit run in the Spring Security filter chain before Spring MVC reads the JSON body. PostgreSQL atomically reserves tenant-scoped idempotency, while an S3 conditional write preserves the first original artifact. Failed object writes leave retryable metadata rather than reporting a completed ingest.
+
+Deletion uses explicit `deleting` and `delete_failed` states because PostgreSQL and S3 do not share a transaction. Retention reuses the same deletion path with a system actor. Reconciliation inspects stale ingestion rows and resumes interrupted deletion without overwriting an original artifact.
 
 ## Development
 

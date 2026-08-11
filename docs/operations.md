@@ -19,6 +19,12 @@ Spring Boot relaxed binding maps the following environment variables to applicat
 | `REPROTRAIL_STORAGE_S3_SECRET_KEY` | Together with access key | Static credential supplied by a secret manager |
 | `REPROTRAIL_STORAGE_S3_PATH_STYLE` | S3-compatible only | Set `true` when the provider requires path-style bucket addressing |
 | `REPROTRAIL_INGEST_MAX_TRACE_BYTES` | No | Maximum measured request body; defaults to 1,048,576 bytes |
+| `REPROTRAIL_MAINTENANCE_ENABLED` | No | Enables reconciliation and retention on this instance; defaults to `false` |
+| `REPROTRAIL_MAINTENANCE_FIXED_DELAY` | No | ISO-8601 delay between runs; defaults to `PT15M` |
+| `REPROTRAIL_MAINTENANCE_RETENTION` | No | ISO-8601 trace retention duration; defaults to `P30D` |
+| `REPROTRAIL_MAINTENANCE_RETENTION_BATCH_SIZE` | No | Maximum expired traces per run; defaults to 100, maximum 1,000 |
+| `REPROTRAIL_MAINTENANCE_RECONCILIATION_STALE_AFTER` | No | Age before an incomplete transition is inspected; defaults to `PT15M` |
+| `REPROTRAIL_MAINTENANCE_RECONCILIATION_BATCH_SIZE` | No | Maximum stale transitions per run; defaults to 100, maximum 1,000 |
 
 Never place production values in `application.yml`, shell history, Gradle properties, GitHub workflow YAML, container images, or this repository. Rotate the token pepper only through a planned credential migration: changing it immediately invalidates every existing ingest token.
 
@@ -28,11 +34,11 @@ Flyway owns schema history under `db/migration`. PostgreSQL stores projects, HMA
 
 Production deployments should use separate migration and runtime database roles. Spring Boot supports dedicated Flyway connection settings; the runtime role should not be able to alter schema. Backups must preserve PostgreSQL metadata and the S3 bucket as one recovery set.
 
-Project and credential creation are currently administrative, out-of-band operations. A future provisioning command or API must generate at least 32 random secret bytes, return the full token once, and persist only its HMAC digest. Until that exists, the hosted alpha is not self-service.
+Project and credential creation are currently administrative, out-of-band operations. A future provisioning command or API must generate at least 32 random secret bytes, return the full token once, and persist only its HMAC digest in either `ingest_credentials` or `developer_credentials`. Until that exists, the hosted alpha is not self-service.
 
 ## Object-storage boundary
 
-The bucket must already exist and remain private. On AWS, the ingestion identity needs `s3:PutObject` plus `s3:GetObject` (used by `HeadObject`) on the configured object prefix. It does not need list, delete, ACL, or public-read permissions for the current endpoint.
+The bucket must already exist and remain private. The runtime identity needs `s3:PutObject`, `s3:GetObject`, and `s3:DeleteObject` on the configured object prefix. It does not need bucket listing, ACL, or public-read permissions. If deployment separates ingestion from access and maintenance processes, assign only the subset each process actually uses.
 
 ReproTrail sends `If-None-Match: *`, which Amazon S3 uses to atomically prevent overwrites. Enforce conditional writes in the bucket policy where the provider supports it. S3-compatible providers must pass the MinIO contract test; older MinIO releases silently ignored this precondition and are unsafe for immutable ingestion.
 
@@ -46,9 +52,16 @@ Trace metadata moves through three storage states:
 2. `available` — the immutable object exists and ingestion can be reported complete.
 3. `failed` — the object write failed or conflicted; an identical retry may resume it.
 
+Deletion adds two transition states:
+
+4. `deleting` — PostgreSQL reserved deletion and the object or final metadata transaction may still be pending.
+5. `delete_failed` — object deletion failed and can be retried by the API or reconciliation.
+
 The database unique constraint serializes concurrent requests for the same project and idempotency key. The first complete request receives `201`; an identical retry receives `200`; changed bytes receive `409`. Storage or database outages remain server errors and clients should retry the same session ID with bounded exponential backoff.
 
 Do not manually change a trace from `failed` to `available`. Confirm the object digest first or retry through the API so the normal invariant checks run.
+
+Maintenance is disabled by default. Enable it on exactly one service replica unless deployment provides an external singleton scheduler; multiple maintenance executors add needless contention even though state transitions and object deletion are idempotent. Reconciliation runs before retention and emits only aggregate counts. Alert whenever either failure count is non-zero or stale transition counts keep growing.
 
 ## Security and observability
 
@@ -57,7 +70,8 @@ Do not manually change a trace from `failed` to `available`. Confirm the object 
 - Never enable HTTP request-body logging, bearer-token logging, SQL parameter logging, or object-content logging.
 - Alert on sustained authentication failures, `413` responses, storage failures, and growing `pending` or `failed` counts without attaching raw request data.
 - Treat package names, session identifiers, timing metadata, and object keys as potentially sensitive telemetry.
-- Apply retention, deletion, and audit policies before accepting real user traces; those endpoints are not implemented in this alpha slice.
+- Restrict developer-token provisioning because those credentials can download and delete every trace in their project.
+- Keep audit retention longer than trace retention and protect the audit table from application-level update or delete paths.
 
 ## Verification and deployment gate
 
@@ -70,5 +84,6 @@ Before deployment, confirm all of the following:
 - The bucket is private, pre-created, encrypted, and denies non-conditional writes where supported.
 - Database, S3, and pepper secrets come from the deployment platform's secret manager.
 - Ingress body limits are at least as strict as the application limit.
+- Exactly one replica has maintenance enabled, and retention has been approved for the deployment's consent and legal policy.
 - Health checks do not expose credentials, tenant data, or trace content.
 - Rollback preserves both new database rows and already-written immutable objects.

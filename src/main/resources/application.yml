@@ -5,6 +5,13 @@ spring:
 reprotrail:
   ingest:
     max-trace-bytes: 1048576
+  maintenance:
+    enabled: false
+    fixed-delay: PT15M
+    retention: P30D
+    retention-batch-size: 100
+    reconciliation-stale-after: PT15M
+    reconciliation-batch-size: 100
 
 management:
   endpoints:
