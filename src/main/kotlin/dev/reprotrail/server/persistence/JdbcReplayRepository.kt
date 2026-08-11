@@ -101,34 +101,35 @@ internal class JdbcReplayRepository(
                 .param("lockKey", request.projectId.mostSignificantBits xor request.projectId.leastSignificantBits)
                 .query { resultSet, _ -> resultSet.getInt("acquired") }
                 .single()
+            val candidateId =
+                jdbc.sql(
+                    """
+                    select id
+                    from replay_jobs
+                    where project_id = :projectId
+                      and attempt_count < max_attempts
+                      and (state = 'queued' or (state = 'leased' and lease_expires_at <= :now))
+                    order by created_at, id
+                    limit 1
+                    """.trimIndent(),
+                ).param("projectId", request.projectId)
+                    .param("now", request.now.atOffset(ZoneOffset.UTC))
+                    .query(UUID::class.java)
+                    .optional()
+                    .orElse(null)
+                    ?: return@execute null
             jdbc.sql(
-            """
-            with candidate as (
-                select id
-                from replay_jobs
-                where project_id = :projectId
-                  and attempt_count < max_attempts
-                  and (state = 'queued' or (state = 'leased' and lease_expires_at <= :now))
-                order by created_at, id
-                for update skip locked
-                limit 1
-            )
-            update replay_jobs as job
-            set state = 'leased',
-                lease_id = :leaseId,
-                lease_owner_credential_id = :workerId,
-                lease_expires_at = :expiresAt,
-                attempt_count = attempt_count + 1,
-                updated_at = :now
-            from candidate
-            where job.project_id = :projectId and job.id = candidate.id
-              and job.attempt_count < job.max_attempts
-              and (job.state = 'queued' or (job.state = 'leased' and job.lease_expires_at <= :now))
-            returning job.lease_id, job.id, job.project_id, job.trace_id,
-                      job.application_artifact_id, job.package_name, job.repetitions,
-                      job.attempt_timeout_seconds, job.lease_expires_at
-            """.trimIndent(),
+                """
+                update replay_jobs
+                set state = 'leased', lease_id = :leaseId,
+                    lease_owner_credential_id = :workerId, lease_expires_at = :expiresAt,
+                    attempt_count = attempt_count + 1, updated_at = :now
+                where project_id = :projectId and id = :candidateId
+                returning lease_id, id, project_id, trace_id, application_artifact_id,
+                          package_name, repetitions, attempt_timeout_seconds, lease_expires_at
+                """.trimIndent(),
             ).param("projectId", request.projectId)
+                .param("candidateId", candidateId)
                 .param("workerId", request.workerCredentialId)
                 .param("leaseId", request.leaseId)
                 .param("now", request.now.atOffset(ZoneOffset.UTC))
