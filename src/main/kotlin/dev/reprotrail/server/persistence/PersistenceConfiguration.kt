@@ -8,6 +8,9 @@ import dev.reprotrail.server.security.HmacTokenDigester
 import dev.reprotrail.server.security.IngestCredentialLookup
 import dev.reprotrail.server.security.SecureDeveloperAuthorizer
 import dev.reprotrail.server.security.SecureIngestAuthorizer
+import dev.reprotrail.server.security.SecureWorkerAuthorizer
+import dev.reprotrail.server.security.WorkerAuthorizer
+import dev.reprotrail.server.security.WorkerCredentialLookup
 import dev.reprotrail.server.retention.TraceRetentionCatalog
 import dev.reprotrail.server.reconciliation.TraceReconciliationCatalog
 import java.time.Clock
@@ -31,6 +34,9 @@ internal class PersistenceConfiguration {
 
     @Bean
     fun developerCredentialLookup(jdbc: JdbcClient): DeveloperCredentialLookup = JdbcDeveloperCredentialLookup(jdbc)
+
+    @Bean
+    fun workerCredentialLookup(jdbc: JdbcClient): WorkerCredentialLookup = JdbcWorkerCredentialLookup(jdbc)
 
     @Bean
     fun traceMetadataStore(jdbc: JdbcClient): TraceMetadataStore = JdbcTraceMetadataStore(jdbc)
@@ -88,4 +94,11 @@ internal class PersistenceConfiguration {
         digester: HmacTokenDigester,
         clock: Clock,
     ): SecureDeveloperAuthorizer = SecureDeveloperAuthorizer(lookup, digester, clock)
+
+    @Bean
+    fun secureWorkerAuthorizer(
+        lookup: WorkerCredentialLookup,
+        digester: HmacTokenDigester,
+        clock: Clock,
+    ): WorkerAuthorizer = SecureWorkerAuthorizer(lookup, digester, clock)
 }

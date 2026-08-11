@@ -16,6 +16,8 @@ import dev.reprotrail.server.ingest.TraceIngestor
 import dev.reprotrail.server.ingest.TraceRepository
 import dev.reprotrail.server.security.DeveloperAuthorizer
 import dev.reprotrail.server.security.DeveloperIdentity
+import dev.reprotrail.server.security.WorkerAuthorizer
+import dev.reprotrail.server.security.WorkerIdentity
 import java.time.Clock
 import dev.reprotrail.server.retention.TraceRetentionCatalog
 import dev.reprotrail.server.reconciliation.TraceArtifactInspection
@@ -61,6 +63,10 @@ class ReproTrailServerApplicationTest {
         @Bean
         internal fun developerAuthorizer(): DeveloperAuthorizer =
             DeveloperAuthorizer { projectId, _ -> DeveloperIdentity(projectId, java.util.UUID.randomUUID()) }
+
+        @Bean
+        internal fun workerAuthorizer(): WorkerAuthorizer =
+            WorkerAuthorizer { projectId, _ -> WorkerIdentity(projectId, java.util.UUID.randomUUID()) }
 
         @Bean
         internal fun traceRepository(): TraceRepository =

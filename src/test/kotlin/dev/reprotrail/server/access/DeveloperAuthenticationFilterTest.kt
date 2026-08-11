@@ -38,7 +38,10 @@ class DeveloperAuthenticationFilterTest {
         val authentication = checkNotNull(SecurityContextHolder.getContext().authentication)
         assertTrue(exchange.chainInvoked)
         assertEquals(DeveloperIdentity(projectId, credentialId), authentication.principal)
-        assertEquals(setOf(TRACE_READ_AUTHORITY, TRACE_DELETE_AUTHORITY), authentication.authorities.map { it.authority }.toSet())
+        assertEquals(
+            setOf(TRACE_READ_AUTHORITY, TRACE_DELETE_AUTHORITY, REPLAY_CREATE_AUTHORITY, REPLAY_READ_AUTHORITY),
+            authentication.authorities.map { it.authority }.toSet(),
+        )
     }
 
     @Test
@@ -46,6 +49,19 @@ class DeveloperAuthenticationFilterTest {
         val exchange = exchange("POST", "/v1/projects/$projectId/traces", null)
 
         assertTrue(exchange.chainInvoked)
+    }
+
+    @Test
+    fun `replay creation requests receive developer authority`() {
+        val traceId = UUID.randomUUID()
+        val exchange =
+            exchange("POST", "/v1/projects/$projectId/traces/$traceId/replay-jobs", "valid-developer-token")
+
+        assertTrue(exchange.chainInvoked)
+        assertEquals(
+            DeveloperIdentity(projectId, credentialId),
+            checkNotNull(SecurityContextHolder.getContext().authentication).principal,
+        )
     }
 
     private fun exchange(method: String, path: String, token: String?): Exchange {

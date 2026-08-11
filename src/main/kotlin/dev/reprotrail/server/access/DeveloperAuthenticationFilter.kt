@@ -13,19 +13,21 @@ import org.springframework.web.filter.OncePerRequestFilter
 
 internal const val TRACE_READ_AUTHORITY = "trace:read"
 internal const val TRACE_DELETE_AUTHORITY = "trace:delete"
+internal const val REPLAY_CREATE_AUTHORITY = "replay:create"
+internal const val REPLAY_READ_AUTHORITY = "replay:read"
 
 internal class DeveloperAuthenticationFilter(
     private val authorizer: DeveloperAuthorizer,
 ) : OncePerRequestFilter() {
     override fun shouldNotFilter(request: HttpServletRequest): Boolean =
-        request.method !in SUPPORTED_METHODS || request.traceProjectId() == null
+        request.developerProjectId() == null
 
     override fun doFilterInternal(
         request: HttpServletRequest,
         response: HttpServletResponse,
         filterChain: FilterChain,
     ) {
-        val projectId = checkNotNull(request.traceProjectId())
+        val projectId = checkNotNull(request.developerProjectId())
         val token = request.getHeader("Authorization").bearerToken()
         val identity = token?.let { authorizer.authorize(projectId, it) }
         if (identity == null) {
@@ -46,20 +48,27 @@ internal class DeveloperAuthenticationFilter(
                 listOf(
                     SimpleGrantedAuthority(TRACE_READ_AUTHORITY),
                     SimpleGrantedAuthority(TRACE_DELETE_AUTHORITY),
+                    SimpleGrantedAuthority(REPLAY_CREATE_AUTHORITY),
+                    SimpleGrantedAuthority(REPLAY_READ_AUTHORITY),
                 ),
             )
         SecurityContextHolder.setContext(context)
         filterChain.doFilter(request, response)
     }
 
-    private companion object {
-        val SUPPORTED_METHODS = setOf("GET", "DELETE")
-    }
 }
 
-private fun HttpServletRequest.traceProjectId(): UUID? {
+private fun HttpServletRequest.developerProjectId(): UUID? {
     val path = requestURI.removePrefix(contextPath).split('/')
-    if (path.size !in 5..7 || path[1] != "v1" || path[2] != "projects" || path[4] != "traces") return null
+    if (path.size < 5 || path[1] != "v1" || path[2] != "projects") return null
+    val supported =
+        when (method) {
+            "GET" -> path[4] == "traces" || path[4] == "replay-jobs"
+            "DELETE" -> path[4] == "traces"
+            "POST" -> path.size == 7 && path[4] == "traces" && path[6] == "replay-jobs"
+            else -> false
+        }
+    if (!supported) return null
     return runCatching { UUID.fromString(path[3]) }.getOrNull()
 }
 
