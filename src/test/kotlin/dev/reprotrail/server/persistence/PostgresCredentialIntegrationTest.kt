@@ -5,6 +5,7 @@ import dev.reprotrail.server.access.TraceArtifactCatalog
 import dev.reprotrail.server.access.TraceAuditAction
 import dev.reprotrail.server.access.TraceAuditEvent
 import dev.reprotrail.server.access.TraceAuditLog
+import dev.reprotrail.server.access.TraceDeletionCatalog
 import dev.reprotrail.server.contract.ValidatedTraceMetadata
 import dev.reprotrail.server.ingest.StoredTrace
 import dev.reprotrail.server.ingest.TraceRepository
@@ -71,6 +72,9 @@ class PostgresCredentialIntegrationTest {
 
     @Autowired
     private lateinit var traceAuditLog: TraceAuditLog
+
+    @Autowired
+    private lateinit var traceDeletionCatalog: TraceDeletionCatalog
 
     @Autowired
     private lateinit var contentStore: InMemoryTraceContentStore
@@ -214,6 +218,40 @@ class PostgresCredentialIntegrationTest {
     }
 
     @Test
+    fun `trace deletion reservation completes metadata and tombstone atomically and retries failure`() {
+        insertTrace(traceSessionId, "2026-08-11T12:00:00Z", "available")
+
+        val reference = traceDeletionCatalog.reserve(projectId, traceSessionId)
+        traceDeletionCatalog.complete(
+            TraceAuditEvent(
+                projectId = projectId,
+                traceId = traceSessionId,
+                actorCredentialId = credentialId,
+                action = TraceAuditAction.Deleted,
+                occurredAt = Instant.parse("2026-08-11T12:01:00Z"),
+            ),
+        )
+
+        assertEquals("projects/$projectId/traces/$traceSessionId.json", reference?.objectKey)
+        assertEquals(0, traceRowCount(traceSessionId))
+        assertEquals(
+            "deleted",
+            jdbc.sql("select action from audit_events where project_id = :projectId and trace_id = :traceId")
+                .param("projectId", projectId)
+                .param("traceId", traceSessionId)
+                .query(String::class.java)
+                .single(),
+        )
+
+        insertTrace(traceSessionId, "2026-08-11T12:02:00Z", "available")
+        traceDeletionCatalog.reserve(projectId, traceSessionId)
+        traceDeletionCatalog.markFailed(projectId, traceSessionId)
+
+        assertEquals("delete_failed", traceStorageState(traceSessionId))
+        assertNotNull(traceDeletionCatalog.reserve(projectId, traceSessionId))
+    }
+
+    @Test
     fun `trace idempotency is atomic under concurrent retries`() {
         val start = CountDownLatch(1)
         val executor = Executors.newFixedThreadPool(2)
@@ -298,6 +336,20 @@ class PostgresCredentialIntegrationTest {
             .param("reservationId", UUID.randomUUID())
             .update()
     }
+
+    private fun traceRowCount(sessionId: UUID): Int =
+        jdbc.sql("select count(*) from traces where project_id = :projectId and session_id = :sessionId")
+            .param("projectId", projectId)
+            .param("sessionId", sessionId)
+            .query(Int::class.java)
+            .single()
+
+    private fun traceStorageState(sessionId: UUID): String =
+        jdbc.sql("select storage_state from traces where project_id = :projectId and session_id = :sessionId")
+            .param("projectId", projectId)
+            .param("sessionId", sessionId)
+            .query(String::class.java)
+            .single()
 
     private fun storedTrace() =
         StoredTrace(

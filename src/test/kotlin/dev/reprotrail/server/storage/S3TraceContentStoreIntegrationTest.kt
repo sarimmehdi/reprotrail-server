@@ -61,6 +61,9 @@ class S3TraceContentStoreIntegrationTest {
             ).asByteArray()
         assertArrayEquals(original, stored)
         assertArrayEquals(original, store.read(TraceArtifactReference(objectKey)))
+        store.delete(TraceArtifactReference(objectKey))
+        store.delete(TraceArtifactReference(objectKey))
+        assertEquals(null, store.read(TraceArtifactReference(objectKey)))
         assertEquals(null, store.read(TraceArtifactReference("missing.json")))
     }
 

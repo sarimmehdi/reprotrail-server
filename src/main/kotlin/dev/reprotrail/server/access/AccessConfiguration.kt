@@ -16,4 +16,11 @@ internal class AccessConfiguration {
         auditLog: TraceAuditLog,
         clock: Clock,
     ): TraceDownloader = DownloadTrace(catalog, reader, auditLog, clock)
+
+    @Bean
+    fun traceDeleter(
+        catalog: TraceDeletionCatalog,
+        artifactDeleter: TraceArtifactDeleter,
+        clock: Clock,
+    ): TraceDeleter = DeleteTrace(catalog, artifactDeleter, clock)
 }

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 
 class TraceAccessControllerTest {
@@ -24,7 +25,8 @@ class TraceAccessControllerTest {
         )
     private val browser = RecordingBrowser(trace)
     private val downloader = RecordingDownloader()
-    private val mockMvc = MockMvcBuilders.standaloneSetup(TraceAccessController(browser, downloader)).build()
+    private val deleter = RecordingDeleter()
+    private val mockMvc = MockMvcBuilders.standaloneSetup(TraceAccessController(browser, downloader, deleter)).build()
 
     @Test
     fun `list returns metadata and an opaque continuation cursor`() {
@@ -86,6 +88,22 @@ class TraceAccessControllerTest {
         assertEquals(Triple(projectId, sessionId, sessionId), downloader.lastRequest)
     }
 
+    @Test
+    fun `delete returns no content and passes the developer audit identity`() {
+        deleter.result = TraceDeletionResult.Deleted
+        val identity = dev.reprotrail.server.security.DeveloperIdentity(projectId, sessionId)
+        val authentication = UsernamePasswordAuthenticationToken.authenticated(identity, null, emptyList())
+
+        mockMvc.delete("/v1/projects/$projectId/traces/$sessionId") {
+            with { request ->
+                request.userPrincipal = authentication
+                request
+            }
+        }.andExpect { status { isNoContent() } }
+
+        assertEquals(Triple(projectId, sessionId, sessionId), deleter.lastRequest)
+    }
+
     private class RecordingBrowser(initialTrace: TraceMetadata) : TraceBrowser {
         var nextPage = TracePage(emptyList(), null)
         var found: TraceMetadata? = initialTrace
@@ -106,6 +124,16 @@ class TraceAccessControllerTest {
         var lastRequest: Triple<UUID, UUID, UUID>? = null
 
         override fun download(projectId: UUID, sessionId: UUID, actorCredentialId: UUID): TraceDownloadResult {
+            lastRequest = Triple(projectId, sessionId, actorCredentialId)
+            return result
+        }
+    }
+
+    private class RecordingDeleter : TraceDeleter {
+        var result: TraceDeletionResult = TraceDeletionResult.NotFound
+        var lastRequest: Triple<UUID, UUID, UUID>? = null
+
+        override fun delete(projectId: UUID, sessionId: UUID, actorCredentialId: UUID): TraceDeletionResult {
             lastRequest = Triple(projectId, sessionId, actorCredentialId)
             return result
         }

@@ -4,6 +4,7 @@ import dev.reprotrail.server.ingest.TraceRepository
 import dev.reprotrail.server.access.TraceCatalog
 import dev.reprotrail.server.access.TraceArtifactCatalog
 import dev.reprotrail.server.access.TraceAuditLog
+import dev.reprotrail.server.access.TraceDeletionCatalog
 import dev.reprotrail.server.security.DeveloperCredentialLookup
 import dev.reprotrail.server.security.HmacTokenDigester
 import dev.reprotrail.server.security.IngestCredentialLookup
@@ -16,6 +17,8 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Profile
 import org.springframework.jdbc.core.simple.JdbcClient
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 
 @Configuration(proxyBeanMethods = false)
 @Profile("!test")
@@ -43,6 +46,12 @@ internal class PersistenceConfiguration {
 
     @Bean
     fun traceAuditLog(jdbc: JdbcClient): TraceAuditLog = JdbcTraceAuditLog(jdbc)
+
+    @Bean
+    fun traceDeletionCatalog(
+        jdbc: JdbcClient,
+        transactionManager: PlatformTransactionManager,
+    ): TraceDeletionCatalog = JdbcTraceDeletionCatalog(jdbc, TransactionTemplate(transactionManager))
 
     @Bean
     fun traceRepository(

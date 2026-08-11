@@ -18,6 +18,7 @@ internal fun interface TraceArtifactReader {
 
 internal enum class TraceAuditAction {
     Downloaded,
+    Deleted,
 }
 
 internal data class TraceAuditEvent(

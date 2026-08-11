@@ -3,7 +3,9 @@ package dev.reprotrail.server
 import dev.reprotrail.server.access.TraceCatalog
 import dev.reprotrail.server.access.TraceArtifactCatalog
 import dev.reprotrail.server.access.TraceArtifactReader
+import dev.reprotrail.server.access.TraceArtifactDeleter
 import dev.reprotrail.server.access.TraceAuditLog
+import dev.reprotrail.server.access.TraceDeletionCatalog
 import dev.reprotrail.server.access.TraceMetadata
 import dev.reprotrail.server.access.TracePage
 import dev.reprotrail.server.access.TracePageCursor
@@ -82,6 +84,19 @@ class ReproTrailServerApplicationTest {
 
         @Bean
         internal fun traceAuditLog(): TraceAuditLog = TraceAuditLog { }
+
+        @Bean
+        internal fun traceArtifactDeleter(): TraceArtifactDeleter = TraceArtifactDeleter { }
+
+        @Bean
+        internal fun traceDeletionCatalog(): TraceDeletionCatalog =
+            object : TraceDeletionCatalog {
+                override fun reserve(projectId: java.util.UUID, sessionId: java.util.UUID) = null
+
+                override fun complete(event: dev.reprotrail.server.access.TraceAuditEvent) = Unit
+
+                override fun markFailed(projectId: java.util.UUID, sessionId: java.util.UUID) = Unit
+            }
 
         @Bean
         internal fun applicationClock(): Clock = Clock.systemUTC()

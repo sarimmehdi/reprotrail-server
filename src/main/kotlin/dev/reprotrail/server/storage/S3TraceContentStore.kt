@@ -2,6 +2,7 @@ package dev.reprotrail.server.storage
 
 import dev.reprotrail.server.access.TraceArtifactReader
 import dev.reprotrail.server.access.TraceArtifactReference
+import dev.reprotrail.server.access.TraceArtifactDeleter
 import dev.reprotrail.server.persistence.TraceContentStore
 import dev.reprotrail.server.persistence.TraceContentWrite
 import dev.reprotrail.server.persistence.TraceContentWriteResult
@@ -9,13 +10,14 @@ import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.model.S3Exception
 
 internal class S3TraceContentStore(
     private val client: S3Client,
     private val bucket: String,
-) : TraceContentStore, TraceArtifactReader {
+) : TraceContentStore, TraceArtifactReader, TraceArtifactDeleter {
     override fun putIfAbsent(write: TraceContentWrite): TraceContentWriteResult {
         var lastConflict: S3Exception? = null
         repeat(MAX_CONDITIONAL_ATTEMPTS) { attempt ->
@@ -56,6 +58,10 @@ internal class S3TraceContentStore(
         } catch (failure: S3Exception) {
             if (failure.statusCode() == NOT_FOUND) null else throw failure
         }
+
+    override fun delete(reference: TraceArtifactReference) {
+        client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(reference.objectKey).build())
+    }
 
     private fun inspectExistingOrThrow(
         write: TraceContentWrite,
