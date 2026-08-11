@@ -55,6 +55,12 @@ internal class PersistenceConfiguration {
         JdbcTraceReconciliationCatalog(jdbc)
 
     @Bean
+    fun jdbcReplayRepository(
+        jdbc: JdbcClient,
+        transactionManager: PlatformTransactionManager,
+    ): JdbcReplayRepository = JdbcReplayRepository(jdbc, TransactionTemplate(transactionManager))
+
+    @Bean
     fun traceRepository(
         metadataStore: TraceMetadataStore,
         contentStore: TraceContentStore,
