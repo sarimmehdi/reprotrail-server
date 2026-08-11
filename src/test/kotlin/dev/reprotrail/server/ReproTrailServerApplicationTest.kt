@@ -127,5 +127,39 @@ class ReproTrailServerApplicationTest {
 
                 override fun markFailed(projectId: java.util.UUID, sessionId: java.util.UUID) = Unit
             }
+
+        @Bean
+        internal fun replayStore(): FakeReplayStore = FakeReplayStore()
+    }
+
+    internal class FakeReplayStore :
+        dev.reprotrail.server.replay.ApplicationArtifactCatalog,
+        dev.reprotrail.server.replay.ReplayJobStore,
+        dev.reprotrail.server.replay.ReplayJobReader,
+        dev.reprotrail.server.replay.ReplayLeaseStore {
+        override fun findArtifact(projectId: java.util.UUID, artifactId: java.util.UUID) = null
+
+        override fun create(
+            request: dev.reprotrail.server.replay.CreateReplayJobRequest,
+            job: dev.reprotrail.server.replay.ReplayJob,
+        ) = job
+
+        override fun findJob(projectId: java.util.UUID, jobId: java.util.UUID) = null
+
+        override fun lease(request: dev.reprotrail.server.replay.LeaseRequest) = null
+
+        override fun heartbeat(request: dev.reprotrail.server.replay.LeaseHeartbeat) = false
+
+        override fun findActive(
+            projectId: java.util.UUID,
+            workerCredentialId: java.util.UUID,
+            jobId: java.util.UUID,
+            leaseId: java.util.UUID,
+            now: java.time.Instant,
+        ) = null
+
+        override fun complete(request: dev.reprotrail.server.replay.CompleteLeaseRequest) = false
+
+        override fun fail(request: dev.reprotrail.server.replay.FailLeaseRequest) = false
     }
 }

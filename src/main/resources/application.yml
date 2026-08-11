@@ -12,6 +12,8 @@ reprotrail:
     retention-batch-size: 100
     reconciliation-stale-after: PT15M
     reconciliation-batch-size: 100
+  replay:
+    lease-duration: PT2M
 
 management:
   endpoints:

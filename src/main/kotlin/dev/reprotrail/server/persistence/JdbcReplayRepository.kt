@@ -9,6 +9,8 @@ import dev.reprotrail.server.replay.LeaseHeartbeat
 import dev.reprotrail.server.replay.LeaseRequest
 import dev.reprotrail.server.replay.ReplayJob
 import dev.reprotrail.server.replay.ReplayJobStore
+import dev.reprotrail.server.replay.ReplayJobReader
+import dev.reprotrail.server.replay.ReplayJobState
 import dev.reprotrail.server.replay.ReplayLeaseStore
 import dev.reprotrail.server.replay.WorkerReplayLease
 import java.sql.ResultSet
@@ -22,8 +24,8 @@ import org.springframework.transaction.support.TransactionTemplate
 internal class JdbcReplayRepository(
     private val jdbc: JdbcClient,
     private val transactions: TransactionTemplate,
-) : ApplicationArtifactCatalog, ReplayJobStore, ReplayLeaseStore {
-    override fun find(projectId: UUID, artifactId: UUID): ApplicationArtifact? =
+) : ApplicationArtifactCatalog, ReplayJobStore, ReplayJobReader, ReplayLeaseStore {
+    override fun findArtifact(projectId: UUID, artifactId: UUID): ApplicationArtifact? =
         jdbc.sql(
             """
             select id, package_name, object_key
@@ -67,6 +69,31 @@ internal class JdbcReplayRepository(
         check(inserted == 1) { "Replay job was not created." }
         return job
     }
+
+    override fun findJob(projectId: UUID, jobId: UUID): ReplayJob? =
+        jdbc.sql(
+            """
+            select id, project_id, trace_id, application_artifact_id, package_name,
+                   repetitions, attempt_timeout_seconds, state, created_at
+            from replay_jobs
+            where project_id = :projectId and id = :jobId
+            """.trimIndent(),
+        ).param("projectId", projectId)
+            .param("jobId", jobId)
+            .query { resultSet, _ ->
+                ReplayJob(
+                    id = resultSet.getObject("id", UUID::class.java),
+                    projectId = resultSet.getObject("project_id", UUID::class.java),
+                    traceId = resultSet.getObject("trace_id", UUID::class.java),
+                    applicationArtifactId = resultSet.getObject("application_artifact_id", UUID::class.java),
+                    packageName = resultSet.getString("package_name"),
+                    repetitions = resultSet.getInt("repetitions"),
+                    attemptTimeout = Duration.ofSeconds(resultSet.getLong("attempt_timeout_seconds")),
+                    state = ReplayJobState.valueOf(resultSet.getString("state").uppercase()),
+                    createdAt = resultSet.getObject("created_at", OffsetDateTime::class.java).toInstant(),
+                )
+            }.optional()
+            .orElse(null)
 
     override fun lease(request: LeaseRequest): WorkerReplayLease? =
         jdbc.sql(

@@ -13,7 +13,7 @@ internal data class ApplicationArtifact(
 )
 
 internal fun interface ApplicationArtifactCatalog {
-    fun find(projectId: UUID, artifactId: UUID): ApplicationArtifact?
+    fun findArtifact(projectId: UUID, artifactId: UUID): ApplicationArtifact?
 }
 
 internal data class CreateReplayJobRequest(
@@ -55,6 +55,10 @@ internal fun interface ReplayJobStore {
     fun create(request: CreateReplayJobRequest, job: ReplayJob): ReplayJob
 }
 
+internal fun interface ReplayJobReader {
+    fun findJob(projectId: UUID, jobId: UUID): ReplayJob?
+}
+
 internal sealed interface ReplayJobCreationResult {
     data class Created(val job: ReplayJob) : ReplayJobCreationResult
 
@@ -75,7 +79,7 @@ internal class CreateReplayJob(
     operator fun invoke(request: CreateReplayJobRequest): ReplayJobCreationResult {
         val trace = traceCatalog.find(request.projectId, request.traceId)
             ?: return ReplayJobCreationResult.TraceNotFound
-        val artifact = applicationArtifactCatalog.find(request.projectId, request.applicationArtifactId)
+        val artifact = applicationArtifactCatalog.findArtifact(request.projectId, request.applicationArtifactId)
             ?: return ReplayJobCreationResult.ApplicationArtifactNotFound
         if (artifact.packageName != trace.packageName) return ReplayJobCreationResult.PackageMismatch
 

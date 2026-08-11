@@ -155,8 +155,8 @@ class JdbcReplayRepositoryIntegrationTest {
 
     @Test
     fun `application artifact lookup remains project scoped`() {
-        assertEquals(artifactId, repository.find(projectId, artifactId)?.id)
-        assertNull(repository.find(UUID.randomUUID(), artifactId))
+        assertEquals(artifactId, repository.findArtifact(projectId, artifactId)?.id)
+        assertNull(repository.findArtifact(UUID.randomUUID(), artifactId))
     }
 
     private fun createJob() {

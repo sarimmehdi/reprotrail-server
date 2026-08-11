@@ -99,7 +99,7 @@ private class FakeTraceCatalog(var found: TraceMetadata?) : TraceCatalog {
 }
 
 private class FakeApplicationArtifactCatalog(var found: ApplicationArtifact?) : ApplicationArtifactCatalog {
-    override fun find(projectId: UUID, artifactId: UUID): ApplicationArtifact? = found
+    override fun findArtifact(projectId: UUID, artifactId: UUID): ApplicationArtifact? = found
 }
 
 private class RecordingReplayJobStore : ReplayJobStore {
