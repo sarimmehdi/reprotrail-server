@@ -1,6 +1,7 @@
 package dev.reprotrail.server.persistence
 
 import dev.reprotrail.server.ingest.TraceRepository
+import dev.reprotrail.server.access.TraceCatalog
 import dev.reprotrail.server.security.DeveloperCredentialLookup
 import dev.reprotrail.server.security.HmacTokenDigester
 import dev.reprotrail.server.security.IngestCredentialLookup
@@ -28,6 +29,9 @@ internal class PersistenceConfiguration {
 
     @Bean
     fun traceMetadataStore(jdbc: JdbcClient): TraceMetadataStore = JdbcTraceMetadataStore(jdbc)
+
+    @Bean
+    fun traceCatalog(jdbc: JdbcClient): TraceCatalog = JdbcTraceCatalog(jdbc)
 
     @Bean
     fun traceRepository(

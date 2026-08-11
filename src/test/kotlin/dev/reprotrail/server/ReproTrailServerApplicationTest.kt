@@ -1,5 +1,9 @@
 package dev.reprotrail.server
 
+import dev.reprotrail.server.access.TraceCatalog
+import dev.reprotrail.server.access.TraceMetadata
+import dev.reprotrail.server.access.TracePage
+import dev.reprotrail.server.access.TracePageCursor
 import dev.reprotrail.server.ingest.IngestAuthorizer
 import dev.reprotrail.server.ingest.StoredTrace
 import dev.reprotrail.server.ingest.TraceCreateResult
@@ -52,6 +56,18 @@ class ReproTrailServerApplicationTest {
         internal fun traceRepository(): TraceRepository =
             object : TraceRepository {
                 override fun create(record: StoredTrace): TraceCreateResult = TraceCreateResult.Created
+            }
+
+        @Bean
+        internal fun traceCatalog(): TraceCatalog =
+            object : TraceCatalog {
+                override fun list(
+                    projectId: java.util.UUID,
+                    cursor: TracePageCursor?,
+                    limit: Int,
+                ): TracePage = TracePage(emptyList(), null)
+
+                override fun find(projectId: java.util.UUID, sessionId: java.util.UUID): TraceMetadata? = null
             }
     }
 }

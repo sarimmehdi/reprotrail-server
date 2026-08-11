@@ -1,5 +1,6 @@
 package dev.reprotrail.server.persistence
 
+import dev.reprotrail.server.access.TraceCatalog
 import dev.reprotrail.server.contract.ValidatedTraceMetadata
 import dev.reprotrail.server.ingest.StoredTrace
 import dev.reprotrail.server.ingest.TraceRepository
@@ -57,6 +58,9 @@ class PostgresCredentialIntegrationTest {
 
     @Autowired
     private lateinit var traceRepository: TraceRepository
+
+    @Autowired
+    private lateinit var traceCatalog: TraceCatalog
 
     @Autowired
     private lateinit var contentStore: InMemoryTraceContentStore
@@ -147,6 +151,28 @@ class PostgresCredentialIntegrationTest {
     }
 
     @Test
+    fun `trace catalog uses stable tenant scoped keyset pagination and hides unavailable rows`() {
+        val newestId = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f450")
+        val oldestId = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f440")
+        val pendingId = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f460")
+        insertTrace(oldestId, "2026-08-11T12:00:00Z", "available")
+        insertTrace(newestId, "2026-08-11T12:01:00Z", "available")
+        insertTrace(pendingId, "2026-08-11T12:02:00Z", "pending")
+
+        val firstPage = traceCatalog.list(projectId, null, 1)
+        val secondPage = traceCatalog.list(projectId, checkNotNull(firstPage.nextCursor), 1)
+
+        assertEquals(listOf(newestId), firstPage.items.map { it.sessionId })
+        assertEquals(listOf(oldestId), secondPage.items.map { it.sessionId })
+        assertEquals(null, secondPage.nextCursor)
+        assertEquals(null, traceCatalog.find(projectId, pendingId))
+        assertEquals(
+            null,
+            traceCatalog.find(UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f499"), newestId),
+        )
+    }
+
+    @Test
     fun `trace idempotency is atomic under concurrent retries`() {
         val start = CountDownLatch(1)
         val executor = Executors.newFixedThreadPool(2)
@@ -206,6 +232,29 @@ class PostgresCredentialIntegrationTest {
             .param("projectId", projectId)
             .param("tokenDigest", digest)
             .param("expiresAt", expiresAt?.atOffset(ZoneOffset.UTC))
+            .update()
+    }
+
+    private fun insertTrace(sessionId: UUID, createdAt: String, storageState: String) {
+        jdbc.sql(
+            """
+            insert into traces (
+                project_id, session_id, idempotency_key, content_sha256, object_key,
+                schema_version, started_at, package_name, capture_mode, action_count,
+                storage_state, reservation_id, created_at, updated_at
+            ) values (
+                :projectId, :sessionId, :sessionId, :digest, :objectKey,
+                '1.0.0-alpha.1', :createdAt, 'dev.reprotrail.fixture', 'internal', 1,
+                :storageState, :reservationId, :createdAt, :createdAt
+            )
+            """.trimIndent(),
+        ).param("projectId", projectId)
+            .param("sessionId", sessionId)
+            .param("digest", ByteArray(32) { it.toByte() })
+            .param("objectKey", "projects/$projectId/traces/$sessionId.json")
+            .param("createdAt", Instant.parse(createdAt).atOffset(ZoneOffset.UTC))
+            .param("storageState", storageState)
+            .param("reservationId", UUID.randomUUID())
             .update()
     }
 
