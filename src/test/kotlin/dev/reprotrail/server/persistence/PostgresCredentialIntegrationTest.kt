@@ -2,6 +2,9 @@ package dev.reprotrail.server.persistence
 
 import dev.reprotrail.server.access.TraceCatalog
 import dev.reprotrail.server.access.TraceArtifactCatalog
+import dev.reprotrail.server.access.TraceArtifactDeleter
+import dev.reprotrail.server.access.TraceArtifactReader
+import dev.reprotrail.server.access.TraceArtifactReference
 import dev.reprotrail.server.access.TraceAuditAction
 import dev.reprotrail.server.access.TraceAuditEvent
 import dev.reprotrail.server.access.TraceAuditLog
@@ -15,6 +18,8 @@ import dev.reprotrail.server.security.IngestCredentialLookup
 import dev.reprotrail.server.security.SecureIngestAuthorizer
 import dev.reprotrail.server.retention.TraceRetentionCatalog
 import dev.reprotrail.server.reconciliation.ReconciliationState
+import dev.reprotrail.server.reconciliation.TraceArtifactInspection
+import dev.reprotrail.server.reconciliation.TraceArtifactInspector
 import dev.reprotrail.server.reconciliation.TraceReconciliationCatalog
 import java.time.Instant
 import java.time.ZoneOffset
@@ -418,7 +423,11 @@ class PostgresCredentialIntegrationTest {
         internal fun traceContentStore(): InMemoryTraceContentStore = InMemoryTraceContentStore()
     }
 
-    internal class InMemoryTraceContentStore : TraceContentStore {
+    internal class InMemoryTraceContentStore :
+        TraceContentStore,
+        TraceArtifactReader,
+        TraceArtifactDeleter,
+        TraceArtifactInspector {
         private val content = ConcurrentHashMap<String, ByteArray>()
 
         override fun putIfAbsent(write: TraceContentWrite): TraceContentWriteResult {
@@ -428,6 +437,25 @@ class PostgresCredentialIntegrationTest {
                 TraceContentWriteResult.AlreadyExists
             } else {
                 TraceContentWriteResult.Conflict
+            }
+        }
+
+        override fun read(reference: TraceArtifactReference): ByteArray? = content[reference.objectKey]?.copyOf()
+
+        override fun delete(reference: TraceArtifactReference) {
+            content.remove(reference.objectKey)
+        }
+
+        override fun inspect(
+            reference: TraceArtifactReference,
+            expectedSha256: ByteArray,
+        ): TraceArtifactInspection {
+            val stored = content[reference.objectKey] ?: return TraceArtifactInspection.Missing
+            val actual = java.security.MessageDigest.getInstance("SHA-256").digest(stored)
+            return if (actual.contentEquals(expectedSha256)) {
+                TraceArtifactInspection.Matching
+            } else {
+                TraceArtifactInspection.Conflict
             }
         }
 
