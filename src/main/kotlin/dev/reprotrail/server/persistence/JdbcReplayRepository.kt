@@ -96,7 +96,12 @@ internal class JdbcReplayRepository(
             .orElse(null)
 
     override fun lease(request: LeaseRequest): WorkerReplayLease? =
-        jdbc.sql(
+        transactions.execute {
+            jdbc.sql("select pg_advisory_xact_lock(:lockKey), 1 as acquired")
+                .param("lockKey", request.projectId.mostSignificantBits xor request.projectId.leastSignificantBits)
+                .query { resultSet, _ -> resultSet.getInt("acquired") }
+                .single()
+            jdbc.sql(
             """
             with candidate as (
                 select id
@@ -123,14 +128,15 @@ internal class JdbcReplayRepository(
                       job.application_artifact_id, job.package_name, job.repetitions,
                       job.attempt_timeout_seconds, job.lease_expires_at
             """.trimIndent(),
-        ).param("projectId", request.projectId)
-            .param("workerId", request.workerCredentialId)
-            .param("leaseId", request.leaseId)
-            .param("now", request.now.atOffset(ZoneOffset.UTC))
-            .param("expiresAt", request.expiresAt.atOffset(ZoneOffset.UTC))
-            .query(::mapLease)
-            .optional()
-            .orElse(null)
+            ).param("projectId", request.projectId)
+                .param("workerId", request.workerCredentialId)
+                .param("leaseId", request.leaseId)
+                .param("now", request.now.atOffset(ZoneOffset.UTC))
+                .param("expiresAt", request.expiresAt.atOffset(ZoneOffset.UTC))
+                .query(::mapLease)
+                .optional()
+                .orElse(null)
+        }
 
     override fun heartbeat(request: LeaseHeartbeat): Boolean =
         jdbc.sql(
