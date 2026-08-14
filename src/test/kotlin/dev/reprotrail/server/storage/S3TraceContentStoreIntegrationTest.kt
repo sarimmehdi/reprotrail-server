@@ -4,6 +4,8 @@ import dev.reprotrail.server.access.TraceArtifactReference
 import dev.reprotrail.server.reconciliation.TraceArtifactInspection
 import dev.reprotrail.server.persistence.TraceContentWrite
 import dev.reprotrail.server.persistence.TraceContentWriteResult
+import dev.reprotrail.server.replay.ReplayArtifactContentWrite
+import dev.reprotrail.server.replay.ReplayArtifactContentWriteResult
 import java.net.URI
 import java.security.MessageDigest
 import java.util.UUID
@@ -80,11 +82,39 @@ class S3TraceContentStoreIntegrationTest {
         )
     }
 
+    @Test
+    fun `conditional writes preserve the first immutable replay artifact`() {
+        val objectKey = "projects/project/replays/job/report.xml"
+        val original = "<testsuite tests=\"1\"/>".encodeToByteArray()
+        val changed = "<testsuite tests=\"2\"/>".encodeToByteArray()
+
+        assertEquals(ReplayArtifactContentWriteResult.STORED, store.putIfAbsent(replayWrite(objectKey, original)))
+        assertEquals(
+            ReplayArtifactContentWriteResult.ALREADY_EXISTS,
+            store.putIfAbsent(replayWrite(objectKey, original)),
+        )
+        assertEquals(ReplayArtifactContentWriteResult.CONFLICT, store.putIfAbsent(replayWrite(objectKey, changed)))
+        val stored =
+            client.getObject(
+                GetObjectRequest.builder().bucket(bucket).key(objectKey).build(),
+                ResponseTransformer.toBytes(),
+            ).asByteArray()
+        assertArrayEquals(original, stored)
+    }
+
     private fun write(objectKey: String, content: ByteArray) =
         TraceContentWrite(
             objectKey = objectKey,
             content = content,
             contentSha256 = MessageDigest.getInstance("SHA-256").digest(content),
+        )
+
+    private fun replayWrite(objectKey: String, content: ByteArray) =
+        ReplayArtifactContentWrite(
+            objectKey = objectKey,
+            content = content,
+            contentSha256 = MessageDigest.getInstance("SHA-256").digest(content),
+            contentType = "application/octet-stream",
         )
 
     companion object {
