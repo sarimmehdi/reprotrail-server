@@ -141,10 +141,13 @@ class ReproTrailServerApplicationTest {
 
     internal class FakeReplayStore :
         dev.reprotrail.server.replay.ApplicationArtifactCatalog,
+        dev.reprotrail.server.replay.ReplayArtifactCatalog,
         dev.reprotrail.server.replay.ReplayJobStore,
         dev.reprotrail.server.replay.ReplayJobReader,
         dev.reprotrail.server.replay.ReplayLeaseStore {
         override fun findArtifact(projectId: java.util.UUID, artifactId: java.util.UUID) = null
+
+        override fun findReplayArtifact(projectId: java.util.UUID, jobId: java.util.UUID, name: String) = null
 
         override fun create(
             request: dev.reprotrail.server.replay.CreateReplayJobRequest,
@@ -152,6 +155,9 @@ class ReproTrailServerApplicationTest {
         ) = job
 
         override fun findJob(projectId: java.util.UUID, jobId: java.util.UUID) = null
+
+        override fun listJobs(projectId: java.util.UUID, traceId: java.util.UUID, limit: Int) =
+            emptyList<dev.reprotrail.server.replay.ReplayJob>()
 
         override fun lease(request: dev.reprotrail.server.replay.LeaseRequest) = null
 

@@ -49,14 +49,32 @@ internal data class ReplayJob(
     val attemptTimeout: Duration,
     val state: ReplayJobState,
     val createdAt: Instant,
+    val attemptCount: Int = 0,
+    val maxAttempts: Int = 3,
+    val passedRepetitions: Int? = null,
+    val failedRepetitions: Int? = null,
+    val failureCode: WorkerReplayFailureCode? = null,
+    val failureSummary: String? = null,
+    val updatedAt: Instant = createdAt,
+    val artifacts: List<ReplayJobArtifact> = emptyList(),
+)
+
+internal data class ReplayJobArtifact(
+    val kind: ReplayArtifactKind,
+    val name: String,
+    val sha256: String,
+    val sizeBytes: Long,
+    val createdAt: Instant,
 )
 
 internal fun interface ReplayJobStore {
     fun create(request: CreateReplayJobRequest, job: ReplayJob): ReplayJob
 }
 
-internal fun interface ReplayJobReader {
+internal interface ReplayJobReader {
     fun findJob(projectId: UUID, jobId: UUID): ReplayJob?
+
+    fun listJobs(projectId: UUID, traceId: UUID, limit: Int): List<ReplayJob>
 }
 
 internal sealed interface ReplayJobCreationResult {

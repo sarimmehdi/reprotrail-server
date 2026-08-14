@@ -12,12 +12,16 @@ internal class JdbcTraceAuditLog(
     override fun append(event: TraceAuditEvent) {
         jdbc.sql(
             """
-            insert into audit_events (id, project_id, trace_id, actor_credential_id, action, occurred_at)
-            values (:id, :projectId, :traceId, :actorCredentialId, :action, :occurredAt)
+            insert into audit_events (
+                id, project_id, trace_id, replay_job_id, actor_credential_id, action, occurred_at
+            ) values (
+                :id, :projectId, :traceId, :replayJobId, :actorCredentialId, :action, :occurredAt
+            )
             """.trimIndent(),
         ).param("id", UUID.randomUUID())
             .param("projectId", event.projectId)
             .param("traceId", event.traceId)
+            .param("replayJobId", event.replayJobId)
             .param("actorCredentialId", event.actorCredentialId)
             .param("action", event.action.name.lowercase())
             .param("occurredAt", event.occurredAt.atOffset(ZoneOffset.UTC))

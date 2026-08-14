@@ -38,7 +38,8 @@ class ReplayControllerTest {
             ApplicationArtifact(artifactId, "dev.reprotrail.fixture", "applications/app.apk")
         }
     private val create = CreateReplayJob(traceCatalog, applicationCatalog, store, clock) { jobId }
-    private val developerController = DeveloperReplayController(create, store)
+    private val artifactDownloader = RecordingReplayArtifactDownloader()
+    private val developerController = DeveloperReplayController(create, store, artifactDownloader)
     private val workerController =
         WorkerReplayController(
             LeaseNextReplayJob(store, clock, Duration.ofMinutes(2)) { leaseId },
@@ -68,6 +69,88 @@ class ReplayControllerTest {
             jsonPath("$.id") { value(jobId.toString()) }
             jsonPath("$.state") { value("queued") }
         }
+    }
+
+    @Test
+    fun `developer inspects replay outcome attempts and artifact metadata`() {
+        store.job =
+            replayJob().copy(
+                state = ReplayJobState.SUCCEEDED,
+                attemptCount = 2,
+                passedRepetitions = 2,
+                failedRepetitions = 1,
+                updatedAt = now.plusSeconds(30),
+                artifacts =
+                    listOf(
+                        ReplayJobArtifact(
+                            ReplayArtifactKind.MAESTRO_OUTPUT,
+                            "repetition-1__commands.json",
+                            "a".repeat(64),
+                            512,
+                            now.plusSeconds(20),
+                        ),
+                    ),
+            )
+
+        mockMvc.get("/v1/projects/$projectId/replay-jobs/$jobId").andExpect {
+            status { isOk() }
+            jsonPath("$.attemptCount") { value(2) }
+            jsonPath("$.maxAttempts") { value(3) }
+            jsonPath("$.passedRepetitions") { value(2) }
+            jsonPath("$.failedRepetitions") { value(1) }
+            jsonPath("$.updatedAt") { value(now.plusSeconds(30).toString()) }
+            jsonPath("$.artifacts[0].kind") { value("maestro_output") }
+            jsonPath("$.artifacts[0].name") { value("repetition-1__commands.json") }
+        }
+    }
+
+    @Test
+    fun `developer lists recent replay jobs for one trace`() {
+        store.job = replayJob()
+
+        mockMvc.get("/v1/projects/$projectId/traces/$traceId/replay-jobs") {
+            param("limit", "20")
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.items[0].id") { value(jobId.toString()) }
+        }
+
+        kotlin.test.assertEquals(Triple(projectId, traceId, 20), store.lastListRequest)
+    }
+
+    @Test
+    fun `developer downloads a replay artifact with its audit identity`() {
+        artifactDownloader.result =
+            ReplayArtifactDownloadResult.Found(
+                ReplayJobArtifact(
+                    ReplayArtifactKind.MAESTRO_OUTPUT,
+                    "repetition-1__commands.json",
+                    "a".repeat(64),
+                    2,
+                    now,
+                ),
+                byteArrayOf(1, 2),
+            )
+
+        mockMvc.get(
+            "/v1/projects/$projectId/replay-jobs/$jobId/artifacts/repetition-1__commands.json",
+        ) {
+            with { request -> request.apply { userPrincipal = developerAuthentication() } }
+        }.andExpect {
+            status { isOk() }
+            content { bytes(byteArrayOf(1, 2)) }
+            header {
+                string(
+                    "Content-Disposition",
+                    "attachment; filename=\"repetition-1__commands.json\"",
+                )
+            }
+        }
+
+        kotlin.test.assertEquals(
+            ReplayArtifactDownloadRequest(projectId, jobId, "repetition-1__commands.json", developerId),
+            artifactDownloader.request,
+        )
     }
 
     @Test
@@ -132,6 +215,19 @@ class ReplayControllerTest {
             Duration.ofMinutes(10),
             now.plusSeconds(120),
         )
+
+    private fun replayJob() =
+        ReplayJob(
+            jobId,
+            projectId,
+            traceId,
+            artifactId,
+            "dev.reprotrail.fixture",
+            3,
+            Duration.ofMinutes(10),
+            ReplayJobState.QUEUED,
+            now,
+        )
 }
 
 private class ControllerTraceCatalog(var trace: TraceMetadata?) : TraceCatalog {
@@ -146,7 +242,8 @@ private class ControllerTraceCatalog(var trace: TraceMetadata?) : TraceCatalog {
 }
 
 private class FakeReplayStore(var active: WorkerReplayLease?) : ReplayJobStore, ReplayJobReader, ReplayLeaseStore {
-    private var job: ReplayJob? = null
+    var job: ReplayJob? = null
+    var lastListRequest: Triple<UUID, UUID, Int>? = null
 
     override fun create(request: CreateReplayJobRequest, job: ReplayJob): ReplayJob {
         this.job = job
@@ -154,6 +251,11 @@ private class FakeReplayStore(var active: WorkerReplayLease?) : ReplayJobStore, 
     }
 
     override fun findJob(projectId: UUID, jobId: UUID): ReplayJob? = job
+
+    override fun listJobs(projectId: UUID, traceId: UUID, limit: Int): List<ReplayJob> {
+        lastListRequest = Triple(projectId, traceId, limit)
+        return listOfNotNull(job)
+    }
 
     override fun lease(request: LeaseRequest): WorkerReplayLease? = active
 
@@ -174,4 +276,26 @@ private class FakeReplayStore(var active: WorkerReplayLease?) : ReplayJobStore, 
 
 private class InMemoryReplayContentStore : ReplayArtifactContentStore {
     override fun putIfAbsent(write: ReplayArtifactContentWrite) = ReplayArtifactContentWriteResult.STORED
+}
+
+private data class ReplayArtifactDownloadRequest(
+    val projectId: UUID,
+    val jobId: UUID,
+    val name: String,
+    val actorId: UUID,
+)
+
+private class RecordingReplayArtifactDownloader : ReplayArtifactDownloader {
+    var result: ReplayArtifactDownloadResult = ReplayArtifactDownloadResult.NotFound
+    var request: ReplayArtifactDownloadRequest? = null
+
+    override fun download(
+        projectId: UUID,
+        jobId: UUID,
+        name: String,
+        actorCredentialId: UUID,
+    ): ReplayArtifactDownloadResult {
+        request = ReplayArtifactDownloadRequest(projectId, jobId, name, actorCredentialId)
+        return result
+    }
 }

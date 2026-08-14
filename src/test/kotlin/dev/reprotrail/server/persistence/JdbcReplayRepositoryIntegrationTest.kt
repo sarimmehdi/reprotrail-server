@@ -151,6 +151,21 @@ class JdbcReplayRepositoryIntegrationTest {
         )
         assertEquals("succeeded", replayState())
         assertEquals(1, jdbc.sql("select count(*) from replay_artifacts").query(Int::class.java).single())
+        val details = assertNotNull(repository.findJob(projectId, jobId))
+        assertEquals(ReplayJobState.SUCCEEDED, details.state)
+        assertEquals(2, details.attemptCount)
+        assertEquals(3, details.maxAttempts)
+        assertEquals(3, details.passedRepetitions)
+        assertEquals(0, details.failedRepetitions)
+        assertEquals(listOf("report.xml"), details.artifacts.map { it.name })
+        assertEquals(
+            "projects/$projectId/replays/$jobId/report.xml",
+            repository.findReplayArtifact(projectId, jobId, "report.xml")?.reference?.objectKey,
+        )
+        assertNull(repository.findReplayArtifact(UUID.randomUUID(), jobId, "report.xml"))
+        assertEquals(listOf(jobId), repository.listJobs(projectId, traceId, 10).map { it.id })
+        assertTrue(repository.listJobs(projectId, UUID.randomUUID(), 10).isEmpty())
+        assertTrue(repository.listJobs(UUID.randomUUID(), traceId, 10).isEmpty())
         assertNull(repository.lease(leaseRequest(UUID.randomUUID(), recoveredAt.plusSeconds(2))))
     }
 

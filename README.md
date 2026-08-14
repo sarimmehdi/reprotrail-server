@@ -28,7 +28,9 @@ ReproTrail Server consumes the tagged [`reprotrail-spec`](https://github.com/sar
 | `GET /v1/projects/{projectId}/traces/{traceId}/content` | Implemented | Project developer token | Download and audit access to the immutable trace |
 | `DELETE /v1/projects/{projectId}/traces/{traceId}` | Implemented | Project developer token | Delete metadata and content while retaining an audit tombstone |
 | `POST /v1/projects/{projectId}/traces/{traceId}/replay-jobs` | Implemented | Project developer token | Create a bounded replay job for a registered APK |
-| `GET /v1/projects/{projectId}/replay-jobs/{jobId}` | Implemented | Project developer token | Read project-scoped replay status |
+| `GET /v1/projects/{projectId}/traces/{traceId}/replay-jobs` | Implemented | Project developer token | List recent replay jobs and artifact metadata |
+| `GET /v1/projects/{projectId}/replay-jobs/{jobId}` | Implemented | Project developer token | Read outcome, attempts, failures, and artifact metadata |
+| `GET /v1/projects/{projectId}/replay-jobs/{jobId}/artifacts/{name}` | Implemented | Project developer token | Download and audit one replay artifact |
 
 The internal worker API leases jobs, heartbeats ownership, downloads the trace and registered APK, uploads immutable diagnostics, and completes or fails an attempt under `/internal/v1/projects/{projectId}/replay-jobs/**`. It accepts only a project-scoped `rt_worker_` credential. This API is not an Android-client or developer-client surface.
 
@@ -41,6 +43,8 @@ Developer credentials use the separate `rt_dev_<credential-uuid>.<base64url-secr
 Trace search accepts optional `query`, `packageName`, `captureMode`, `startedAfter`, and `startedBefore` parameters. `query` performs a case-insensitive substring match against package name and session ID; the other fields are exact or half-open time-range filters. Filters compose with the opaque cursor and never cross the authenticated project boundary.
 
 Worker credentials use `rt_worker_<credential-uuid>.<base64url-secret>` and grant only project-scoped replay work. A lease expires after a bounded interval, can be recovered by another worker, and rejects stale heartbeats, downloads, uploads, completion, and failure reports. Concurrent PostgreSQL claims cannot return the same queued job to two workers.
+
+Replay status returns metadata until a developer explicitly downloads an artifact. Workers run Maestro with `--test-output-dir`; Maestro's `commands-*.json` output is the authoritative per-command status source used by the console to correlate generated commands with captured actions and show the first divergence. Artifact downloads are project-scoped and append a developer-attributed audit event containing both trace and replay-job identity.
 
 Authentication and the configured request-size limit run in the Spring Security filter chain before Spring MVC reads the JSON body. PostgreSQL atomically reserves tenant-scoped idempotency, while an S3 conditional write preserves the first original artifact. Failed object writes leave retryable metadata rather than reporting a completed ingest.
 

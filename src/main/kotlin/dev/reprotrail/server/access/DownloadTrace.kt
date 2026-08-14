@@ -21,6 +21,7 @@ internal enum class TraceAuditAction {
     Deleted,
     RetentionDeleted,
     ReconciledDeleted,
+    ReplayArtifactDownloaded,
 }
 
 internal data class TraceAuditEvent(
@@ -29,6 +30,7 @@ internal data class TraceAuditEvent(
     val actorCredentialId: UUID?,
     val action: TraceAuditAction,
     val occurredAt: Instant,
+    val replayJobId: UUID? = null,
 )
 
 internal fun interface TraceAuditLog {

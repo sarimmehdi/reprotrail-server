@@ -2,6 +2,7 @@ package dev.reprotrail.server.replay
 
 import dev.reprotrail.server.access.TraceArtifactCatalog
 import dev.reprotrail.server.access.TraceArtifactReader
+import dev.reprotrail.server.access.TraceAuditLog
 import dev.reprotrail.server.reconciliation.TraceArtifactInspection
 import dev.reprotrail.server.reconciliation.TraceArtifactInspector
 import dev.reprotrail.server.access.TraceCatalog
@@ -60,4 +61,12 @@ internal class ReplayConfiguration {
         clock: Clock,
         @Value("\${reprotrail.replay.max-artifact-bytes:5242880}") maxArtifactBytes: Long,
     ): UploadReplayArtifact = UploadReplayArtifact(leases, contentStore, clock, maxArtifactBytes)
+
+    @Bean
+    fun downloadReplayArtifact(
+        artifacts: ReplayArtifactCatalog,
+        reader: TraceArtifactReader,
+        auditLog: TraceAuditLog,
+        clock: Clock,
+    ): ReplayArtifactDownloader = DownloadReplayArtifact(artifacts, reader, auditLog, clock)
 }
