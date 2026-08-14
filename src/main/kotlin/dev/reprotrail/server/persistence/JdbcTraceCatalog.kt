@@ -6,6 +6,7 @@ import dev.reprotrail.server.access.TraceArtifactReference
 import dev.reprotrail.server.access.TraceMetadata
 import dev.reprotrail.server.access.TracePage
 import dev.reprotrail.server.access.TracePageCursor
+import dev.reprotrail.server.access.TraceSearchCriteria
 import java.sql.ResultSet
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -16,6 +17,15 @@ internal class JdbcTraceCatalog(
     private val jdbc: JdbcClient,
 ) : TraceCatalog, TraceArtifactCatalog {
     override fun list(projectId: UUID, cursor: TracePageCursor?, limit: Int): TracePage {
+        return search(projectId, TraceSearchCriteria(), cursor, limit)
+    }
+
+    override fun search(
+        projectId: UUID,
+        criteria: TraceSearchCriteria,
+        cursor: TracePageCursor?,
+        limit: Int,
+    ): TracePage {
         val rows =
             jdbc.sql(
                 """
@@ -25,6 +35,15 @@ internal class JdbcTraceCatalog(
                 where project_id = :projectId
                   and storage_state = 'available'
                   and (
+                      cast(:query as text) is null
+                      or position(lower(cast(:query as text)) in lower(package_name)) > 0
+                      or position(lower(cast(:query as text)) in lower(cast(session_id as text))) > 0
+                  )
+                  and (cast(:packageName as text) is null or package_name = cast(:packageName as text))
+                  and (cast(:captureMode as text) is null or capture_mode = cast(:captureMode as text))
+                  and (cast(:startedAfter as timestamptz) is null or started_at >= cast(:startedAfter as timestamptz))
+                  and (cast(:startedBefore as timestamptz) is null or started_at < cast(:startedBefore as timestamptz))
+                  and (
                       cast(:cursorCreatedAt as timestamptz) is null
                       or (created_at, session_id) < (cast(:cursorCreatedAt as timestamptz), cast(:cursorSessionId as uuid))
                   )
@@ -32,6 +51,11 @@ internal class JdbcTraceCatalog(
                 limit :fetchLimit
                 """.trimIndent(),
             ).param("projectId", projectId)
+                .param("query", criteria.query)
+                .param("packageName", criteria.packageName)
+                .param("captureMode", criteria.captureMode)
+                .param("startedAfter", criteria.startedAfter?.atOffset(ZoneOffset.UTC))
+                .param("startedBefore", criteria.startedBefore?.atOffset(ZoneOffset.UTC))
                 .param("cursorCreatedAt", cursor?.createdAt?.atOffset(ZoneOffset.UTC))
                 .param("cursorSessionId", cursor?.sessionId)
                 .param("fetchLimit", limit + 1)

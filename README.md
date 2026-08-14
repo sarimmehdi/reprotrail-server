@@ -23,7 +23,7 @@ ReproTrail Server consumes the tagged [`reprotrail-spec`](https://github.com/sar
 | Method and path | Status | Authority | Outcome |
 | --- | --- | --- | --- |
 | `POST /v1/projects/{projectId}/traces` | Implemented | Project ingest token | Validate and idempotently store one immutable trace |
-| `GET /v1/projects/{projectId}/traces` | Implemented | Project developer token | List available tenant-scoped metadata with bounded keyset pagination |
+| `GET /v1/projects/{projectId}/traces` | Implemented | Project developer token | Search available tenant-scoped metadata with bounded keyset pagination |
 | `GET /v1/projects/{projectId}/traces/{traceId}` | Implemented | Project developer token | Read available trace metadata |
 | `GET /v1/projects/{projectId}/traces/{traceId}/content` | Implemented | Project developer token | Download and audit access to the immutable trace |
 | `DELETE /v1/projects/{projectId}/traces/{traceId}` | Implemented | Project developer token | Delete metadata and content while retaining an audit tombstone |
@@ -37,6 +37,8 @@ Retries use the trace session UUID as `Idempotency-Key`. Reusing a key with diff
 Bearer credentials use `rt_ingest_<credential-uuid>.<base64url-secret>`. Only an HMAC-SHA-256 digest is stored in PostgreSQL; the raw token and server-side pepper must never be persisted or logged by this service.
 
 Developer credentials use the separate `rt_dev_<credential-uuid>.<base64url-secret>` prefix and `developer_credentials` table. They grant project-scoped read, download, and delete authority but never ingestion authority. Downloads and deletions retain the acting developer credential ID in append-oriented audit events. List cursors are opaque and clients must not construct or edit them.
+
+Trace search accepts optional `query`, `packageName`, `captureMode`, `startedAfter`, and `startedBefore` parameters. `query` performs a case-insensitive substring match against package name and session ID; the other fields are exact or half-open time-range filters. Filters compose with the opaque cursor and never cross the authenticated project boundary.
 
 Worker credentials use `rt_worker_<credential-uuid>.<base64url-secret>` and grant only project-scoped replay work. A lease expires after a bounded interval, can be recovered by another worker, and rejects stale heartbeats, downloads, uploads, completion, and failure reports. Concurrent PostgreSQL claims cannot return the same queued job to two workers.
 

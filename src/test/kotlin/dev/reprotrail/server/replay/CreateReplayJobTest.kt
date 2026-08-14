@@ -93,7 +93,12 @@ class CreateReplayJobTest {
 }
 
 private class FakeTraceCatalog(var found: TraceMetadata?) : TraceCatalog {
-    override fun list(projectId: UUID, cursor: TracePageCursor?, limit: Int): TracePage = error("not used")
+    override fun search(
+        projectId: UUID,
+        criteria: dev.reprotrail.server.access.TraceSearchCriteria,
+        cursor: TracePageCursor?,
+        limit: Int,
+    ): TracePage = error("not used")
 
     override fun find(projectId: UUID, sessionId: UUID): TraceMetadata? = found
 }

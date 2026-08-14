@@ -48,6 +48,47 @@ class TraceAccessControllerTest {
     }
 
     @Test
+    fun `list passes normalized project scoped search filters`() {
+        mockMvc.get("/v1/projects/$projectId/traces") {
+            param("query", "  fixture  ")
+            param("packageName", "dev.reprotrail.fixture")
+            param("captureMode", "internal")
+            param("startedAfter", "2026-08-01T00:00:00Z")
+            param("startedBefore", "2026-09-01T00:00:00Z")
+        }.andExpect { status { isOk() } }
+
+        assertEquals(
+            TraceSearchCriteria(
+                query = "fixture",
+                packageName = "dev.reprotrail.fixture",
+                captureMode = "internal",
+                startedAfter = Instant.parse("2026-08-01T00:00:00Z"),
+                startedBefore = Instant.parse("2026-09-01T00:00:00Z"),
+            ),
+            browser.lastCriteria,
+        )
+    }
+
+    @Test
+    fun `invalid search filters return 400 before browsing`() {
+        mockMvc.get("/v1/projects/$projectId/traces") {
+            param("query", "x".repeat(201))
+        }.andExpect {
+            status { isBadRequest() }
+            jsonPath("$.code") { value("invalid_search") }
+        }
+        mockMvc.get("/v1/projects/$projectId/traces") {
+            param("startedAfter", "2026-09-01T00:00:00Z")
+            param("startedBefore", "2026-08-01T00:00:00Z")
+        }.andExpect {
+            status { isBadRequest() }
+            jsonPath("$.code") { value("invalid_search") }
+        }
+
+        assertEquals(0, browser.listCalls)
+    }
+
+    @Test
     fun `metadata returns 404 for a tenant miss`() {
         browser.found = null
 
@@ -109,10 +150,23 @@ class TraceAccessControllerTest {
         var nextPage = TracePage(emptyList(), null)
         var found: TraceMetadata? = initialTrace
         var lastCursor: TracePageCursor? = null
+        var lastCriteria: TraceSearchCriteria? = null
         var listCalls = 0
 
         override fun list(projectId: UUID, cursor: TracePageCursor?, limit: Int): TracePage {
             listCalls += 1
+            lastCursor = cursor
+            return nextPage
+        }
+
+        override fun search(
+            projectId: UUID,
+            criteria: TraceSearchCriteria,
+            cursor: TracePageCursor?,
+            limit: Int,
+        ): TracePage {
+            listCalls += 1
+            lastCriteria = criteria
             lastCursor = cursor
             return nextPage
         }

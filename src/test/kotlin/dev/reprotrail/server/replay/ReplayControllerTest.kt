@@ -135,7 +135,12 @@ class ReplayControllerTest {
 }
 
 private class ControllerTraceCatalog(var trace: TraceMetadata?) : TraceCatalog {
-    override fun list(projectId: UUID, cursor: TracePageCursor?, limit: Int): TracePage = error("not used")
+    override fun search(
+        projectId: UUID,
+        criteria: dev.reprotrail.server.access.TraceSearchCriteria,
+        cursor: TracePageCursor?,
+        limit: Int,
+    ): TracePage = error("not used")
 
     override fun find(projectId: UUID, sessionId: UUID): TraceMetadata? = trace
 }

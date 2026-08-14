@@ -30,6 +30,11 @@ internal class TraceAccessController(
         @PathVariable projectId: UUID,
         @RequestParam(defaultValue = "50") limit: Int,
         @RequestParam(required = false) cursor: String?,
+        @RequestParam(required = false) query: String?,
+        @RequestParam(required = false) packageName: String?,
+        @RequestParam(required = false) captureMode: String?,
+        @RequestParam(required = false) startedAfter: Instant?,
+        @RequestParam(required = false) startedBefore: Instant?,
     ): ResponseEntity<Any> {
         if (limit !in 1..MAXIMUM_PAGE_SIZE) {
             return error(HttpStatus.BAD_REQUEST, "invalid_limit", "Limit must be between 1 and $MAXIMUM_PAGE_SIZE.")
@@ -38,7 +43,19 @@ internal class TraceAccessController(
         if (cursor != null && decodedCursor == null) {
             return error(HttpStatus.BAD_REQUEST, "invalid_cursor", "Cursor is invalid or malformed.")
         }
-        val page = browser.list(projectId, decodedCursor, limit)
+        val criteria =
+            try {
+                TraceSearchCriteria(
+                    query = query.normalized(),
+                    packageName = packageName.normalized(),
+                    captureMode = captureMode.normalized(),
+                    startedAfter = startedAfter,
+                    startedBefore = startedBefore,
+                )
+            } catch (_: IllegalArgumentException) {
+                return error(HttpStatus.BAD_REQUEST, "invalid_search", "Search filters are invalid or too long.")
+            }
+        val page = browser.search(projectId, criteria, decodedCursor, limit)
         return ResponseEntity.ok(
             TraceListResponse(
                 items = page.items.map(TraceMetadata::toResponse),
@@ -144,3 +161,5 @@ private fun decodeCursor(value: String): TracePageCursor? =
             sessionId = UUID.fromString(decoded.substring(separator + 1)),
         )
     }.getOrNull()
+
+private fun String?.normalized(): String? = this?.trim()?.takeIf(String::isNotEmpty)

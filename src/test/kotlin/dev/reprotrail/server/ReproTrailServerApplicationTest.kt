@@ -77,8 +77,9 @@ class ReproTrailServerApplicationTest {
         @Bean
         internal fun traceCatalog(): TraceCatalog =
             object : TraceCatalog {
-                override fun list(
+                override fun search(
                     projectId: java.util.UUID,
+                    criteria: dev.reprotrail.server.access.TraceSearchCriteria,
                     cursor: TracePageCursor?,
                     limit: Int,
                 ): TracePage = TracePage(emptyList(), null)

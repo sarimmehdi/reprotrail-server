@@ -131,6 +131,21 @@ class PostgresCredentialIntegrationTest {
     }
 
     @Test
+    fun `Flyway creates tenant scoped indexes for trace search filters`() {
+        val indexes =
+            jdbc.sql(
+                """
+                select indexname
+                from pg_indexes
+                where schemaname = 'public' and tablename = 'traces'
+                """.trimIndent(),
+            ).query(String::class.java).list()
+
+        assertTrue(indexes.contains("traces_project_available_started_idx"))
+        assertTrue(indexes.contains("traces_project_available_package_started_idx"))
+    }
+
+    @Test
     fun `credential lookup is project scoped and preserves lifecycle fields`() {
         val digest = digester.digest(secret)
         insertCredential(digest, expiresAt = Instant.parse("2030-01-01T00:00:00Z"))
@@ -198,6 +213,43 @@ class PostgresCredentialIntegrationTest {
             null,
             traceCatalog.find(UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f499"), newestId),
         )
+    }
+
+    @Test
+    fun `trace search combines textual metadata time and capture filters within the tenant`() {
+        val matchingId = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f473")
+        val otherPackageId = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f474")
+        val otherProjectId = UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f499")
+        insertTrace(matchingId, "2026-08-11T12:00:00Z", "available", "dev.reprotrail.checkout")
+        insertTrace(otherPackageId, "2026-08-11T12:01:00Z", "available", "dev.reprotrail.profile")
+        jdbc.sql("insert into projects (id, name) values (:id, :name)")
+            .param("id", otherProjectId)
+            .param("name", "Other tenant")
+            .update()
+        insertTrace(
+            matchingId,
+            "2026-08-11T12:02:00Z",
+            "available",
+            "dev.reprotrail.checkout",
+            project = otherProjectId,
+        )
+
+        val page =
+            traceCatalog.search(
+                projectId = projectId,
+                criteria =
+                    dev.reprotrail.server.access.TraceSearchCriteria(
+                        query = "CHECKOUT",
+                        packageName = "dev.reprotrail.checkout",
+                        captureMode = "internal",
+                        startedAfter = Instant.parse("2026-08-11T11:59:00Z"),
+                        startedBefore = Instant.parse("2026-08-11T12:01:00Z"),
+                    ),
+                cursor = null,
+                limit = 10,
+            )
+
+        assertEquals(listOf(matchingId), page.items.map { it.sessionId })
     }
 
     @Test
@@ -362,7 +414,13 @@ class PostgresCredentialIntegrationTest {
             .update()
     }
 
-    private fun insertTrace(sessionId: UUID, createdAt: String, storageState: String) {
+    private fun insertTrace(
+        sessionId: UUID,
+        createdAt: String,
+        storageState: String,
+        packageName: String = "dev.reprotrail.fixture",
+        project: UUID = projectId,
+    ) {
         jdbc.sql(
             """
             insert into traces (
@@ -371,15 +429,16 @@ class PostgresCredentialIntegrationTest {
                 storage_state, reservation_id, created_at, updated_at
             ) values (
                 :projectId, :sessionId, :sessionId, :digest, :objectKey,
-                '1.0.0-alpha.1', :createdAt, 'dev.reprotrail.fixture', 'internal', 1,
+                '1.0.0-alpha.1', :createdAt, :packageName, 'internal', 1,
                 :storageState, :reservationId, :createdAt, :createdAt
             )
             """.trimIndent(),
-        ).param("projectId", projectId)
+        ).param("projectId", project)
             .param("sessionId", sessionId)
             .param("digest", ByteArray(32) { it.toByte() })
             .param("objectKey", "projects/$projectId/traces/$sessionId.json")
             .param("createdAt", Instant.parse(createdAt).atOffset(ZoneOffset.UTC))
+            .param("packageName", packageName)
             .param("storageState", storageState)
             .param("reservationId", UUID.randomUUID())
             .update()
