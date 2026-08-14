@@ -8,6 +8,7 @@ import dev.reprotrail.server.replay.ReplayArtifactReceipt
 import dev.reprotrail.server.replay.ReplayCompletion
 import dev.reprotrail.server.replay.ReplayJob
 import dev.reprotrail.server.replay.ReplayJobState
+import dev.reprotrail.server.replay.WorkerReplayLease
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
@@ -118,7 +119,7 @@ class JdbcReplayRepositoryIntegrationTest {
         try {
             val leases =
                 List(2) {
-                    executor.submit {
+                    executor.submit<WorkerReplayLease?> {
                         start.await()
                         repository.lease(leaseRequest(UUID.randomUUID(), now))
                     }
