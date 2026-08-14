@@ -13,6 +13,7 @@ import dev.reprotrail.server.contract.ValidatedTraceMetadata
 import dev.reprotrail.server.ingest.StoredTrace
 import dev.reprotrail.server.ingest.TraceRepository
 import dev.reprotrail.server.security.HmacTokenDigester
+import dev.reprotrail.server.security.AdminCredentialLookup
 import dev.reprotrail.server.security.DeveloperCredentialLookup
 import dev.reprotrail.server.security.IngestCredentialLookup
 import dev.reprotrail.server.security.SecureIngestAuthorizer
@@ -64,6 +65,9 @@ class PostgresCredentialIntegrationTest {
     private lateinit var developerLookup: DeveloperCredentialLookup
 
     @Autowired
+    private lateinit var adminLookup: AdminCredentialLookup
+
+    @Autowired
     private lateinit var digester: HmacTokenDigester
 
     @Autowired
@@ -102,6 +106,7 @@ class PostgresCredentialIntegrationTest {
         jdbc.sql("delete from audit_events").update()
         jdbc.sql("delete from traces").update()
         jdbc.sql("delete from developer_credentials").update()
+        jdbc.sql("delete from admin_credentials").update()
         jdbc.sql("delete from ingest_credentials").update()
         jdbc.sql("delete from projects").update()
         contentStore.clear()
@@ -125,7 +130,14 @@ class PostgresCredentialIntegrationTest {
 
         assertTrue(
             tables.containsAll(
-                listOf("audit_events", "developer_credentials", "ingest_credentials", "projects", "traces"),
+                listOf(
+                    "admin_credentials",
+                    "audit_events",
+                    "developer_credentials",
+                    "ingest_credentials",
+                    "projects",
+                    "traces",
+                ),
             ),
         )
     }
@@ -191,6 +203,26 @@ class PostgresCredentialIntegrationTest {
             null,
             developerLookup.find(UUID.fromString("018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f499"), credentialId),
         )
+    }
+
+    @Test
+    fun `admin credential lookup is separately project scoped`() {
+        val digest = digester.digest(secret)
+        jdbc.sql(
+            """
+            insert into admin_credentials (id, project_id, token_digest, expires_at)
+            values (:id, :projectId, :tokenDigest, :expiresAt)
+            """.trimIndent(),
+        ).param("id", credentialId)
+            .param("projectId", projectId)
+            .param("tokenDigest", digest)
+            .param("expiresAt", Instant.parse("2030-01-01T00:00:00Z").atOffset(ZoneOffset.UTC))
+            .update()
+
+        val stored = adminLookup.find(projectId, credentialId)
+
+        assertArrayEquals(digest, stored?.tokenDigest)
+        assertEquals(null, adminLookup.find(UUID.randomUUID(), credentialId))
     }
 
     @Test

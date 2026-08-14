@@ -9,6 +9,9 @@ import dev.reprotrail.server.ingest.INGEST_AUTHORITY
 import dev.reprotrail.server.ingest.IngestAuthenticationFilter
 import dev.reprotrail.server.ingest.IngestAuthorizer
 import dev.reprotrail.server.security.DeveloperAuthorizer
+import dev.reprotrail.server.security.AdminAuthorizer
+import dev.reprotrail.server.retention.AdminAuthenticationFilter
+import dev.reprotrail.server.retention.RETENTION_ADMIN_AUTHORITY
 import dev.reprotrail.server.security.WorkerAuthorizer
 import dev.reprotrail.server.replay.REPLAY_WORK_AUTHORITY
 import dev.reprotrail.server.replay.WorkerAuthenticationFilter
@@ -39,11 +42,16 @@ internal class SecurityConfiguration {
         WorkerAuthenticationFilter(authorizer)
 
     @Bean
+    fun adminAuthenticationFilter(authorizer: AdminAuthorizer): AdminAuthenticationFilter =
+        AdminAuthenticationFilter(authorizer)
+
+    @Bean
     fun securityFilterChain(
         http: HttpSecurity,
         ingestAuthenticationFilter: IngestAuthenticationFilter,
         developerAuthenticationFilter: DeveloperAuthenticationFilter,
         workerAuthenticationFilter: WorkerAuthenticationFilter,
+        adminAuthenticationFilter: AdminAuthenticationFilter,
     ): SecurityFilterChain {
         http
             .csrf { it.disable() }
@@ -69,6 +77,8 @@ internal class SecurityConfiguration {
                     .hasAuthority(REPLAY_CREATE_AUTHORITY)
                     .requestMatchers(HttpMethod.GET, "/v1/projects/*/replay-jobs/**")
                     .hasAuthority(REPLAY_READ_AUTHORITY)
+                    .requestMatchers("/v1/projects/*/retention-policy")
+                    .hasAuthority(RETENTION_ADMIN_AUTHORITY)
                     .requestMatchers("/internal/v1/projects/*/replay-jobs/**")
                     .hasAuthority(REPLAY_WORK_AUTHORITY)
                     .anyRequest().denyAll()
@@ -76,6 +86,7 @@ internal class SecurityConfiguration {
             .addFilterBefore(ingestAuthenticationFilter, AnonymousAuthenticationFilter::class.java)
             .addFilterBefore(developerAuthenticationFilter, AnonymousAuthenticationFilter::class.java)
             .addFilterBefore(workerAuthenticationFilter, AnonymousAuthenticationFilter::class.java)
+            .addFilterBefore(adminAuthenticationFilter, AnonymousAuthenticationFilter::class.java)
         return http.build()
     }
 }

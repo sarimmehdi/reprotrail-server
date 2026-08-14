@@ -4,6 +4,9 @@ import dev.reprotrail.server.ingest.TraceRepository
 import dev.reprotrail.server.access.TraceAuditLog
 import dev.reprotrail.server.access.TraceDeletionCatalog
 import dev.reprotrail.server.security.DeveloperCredentialLookup
+import dev.reprotrail.server.security.AdminCredentialLookup
+import dev.reprotrail.server.security.SecureAdminAuthorizer
+import dev.reprotrail.server.security.AdminAuthorizer
 import dev.reprotrail.server.security.HmacTokenDigester
 import dev.reprotrail.server.security.IngestCredentialLookup
 import dev.reprotrail.server.security.SecureDeveloperAuthorizer
@@ -34,6 +37,9 @@ internal class PersistenceConfiguration {
 
     @Bean
     fun developerCredentialLookup(jdbc: JdbcClient): DeveloperCredentialLookup = JdbcDeveloperCredentialLookup(jdbc)
+
+    @Bean
+    fun adminCredentialLookup(jdbc: JdbcClient): AdminCredentialLookup = JdbcAdminCredentialLookup(jdbc)
 
     @Bean
     fun workerCredentialLookup(jdbc: JdbcClient): WorkerCredentialLookup = JdbcWorkerCredentialLookup(jdbc)
@@ -94,6 +100,13 @@ internal class PersistenceConfiguration {
         digester: HmacTokenDigester,
         clock: Clock,
     ): SecureDeveloperAuthorizer = SecureDeveloperAuthorizer(lookup, digester, clock)
+
+    @Bean
+    fun secureAdminAuthorizer(
+        lookup: AdminCredentialLookup,
+        digester: HmacTokenDigester,
+        clock: Clock,
+    ): AdminAuthorizer = SecureAdminAuthorizer(lookup, digester, clock)
 
     @Bean
     fun secureWorkerAuthorizer(

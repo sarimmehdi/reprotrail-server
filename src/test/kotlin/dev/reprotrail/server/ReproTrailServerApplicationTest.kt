@@ -65,6 +65,12 @@ class ReproTrailServerApplicationTest {
             DeveloperAuthorizer { projectId, _ -> DeveloperIdentity(projectId, java.util.UUID.randomUUID()) }
 
         @Bean
+        internal fun adminAuthorizer(): dev.reprotrail.server.security.AdminAuthorizer =
+            dev.reprotrail.server.security.AdminAuthorizer { projectId, _ ->
+                dev.reprotrail.server.security.AdminIdentity(projectId, java.util.UUID.randomUUID())
+            }
+
+        @Bean
         internal fun workerAuthorizer(): WorkerAuthorizer =
             WorkerAuthorizer { projectId, _ -> WorkerIdentity(projectId, java.util.UUID.randomUUID()) }
 
