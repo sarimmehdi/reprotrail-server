@@ -34,7 +34,7 @@ class RetainTracesTest {
         val report = runner.run(Duration.ofDays(30), 100)
 
         assertEquals(TraceRetentionReport(examined = 3, deleted = 1, alreadyMissing = 1, failed = 1), report)
-        assertEquals(now.minus(Duration.ofDays(30)) to 100, catalog.lastQuery)
+        assertEquals(Triple(now, Duration.ofDays(30), 100), catalog.lastQuery)
         assertEquals(setOf(null), deleter.actorIds)
         assertEquals(setOf(TraceAuditAction.RetentionDeleted), deleter.actions)
     }
@@ -46,10 +46,10 @@ class RetainTracesTest {
     }
 
     private class RecordingRetentionCatalog(private val traces: List<RetainedTraceIdentity>) : TraceRetentionCatalog {
-        var lastQuery: Pair<Instant, Int>? = null
+        var lastQuery: Triple<Instant, Duration, Int>? = null
 
-        override fun findExpired(createdBefore: Instant, limit: Int): List<RetainedTraceIdentity> {
-            lastQuery = createdBefore to limit
+        override fun findExpired(asOf: Instant, defaultRetainFor: Duration, limit: Int): List<RetainedTraceIdentity> {
+            lastQuery = Triple(asOf, defaultRetainFor, limit)
             return traces
         }
     }

@@ -15,6 +15,7 @@ import dev.reprotrail.server.security.SecureWorkerAuthorizer
 import dev.reprotrail.server.security.WorkerAuthorizer
 import dev.reprotrail.server.security.WorkerCredentialLookup
 import dev.reprotrail.server.retention.TraceRetentionCatalog
+import dev.reprotrail.server.retention.RetentionPolicyStore
 import dev.reprotrail.server.reconciliation.TraceReconciliationCatalog
 import java.time.Clock
 import java.util.Base64
@@ -61,6 +62,12 @@ internal class PersistenceConfiguration {
 
     @Bean
     fun traceRetentionCatalog(jdbc: JdbcClient): TraceRetentionCatalog = JdbcTraceRetentionCatalog(jdbc)
+
+    @Bean
+    fun retentionPolicyStore(
+        jdbc: JdbcClient,
+        transactionManager: PlatformTransactionManager,
+    ): RetentionPolicyStore = JdbcRetentionPolicyStore(jdbc, TransactionTemplate(transactionManager))
 
     @Bean
     fun traceReconciliationCatalog(jdbc: JdbcClient): TraceReconciliationCatalog =

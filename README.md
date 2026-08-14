@@ -31,6 +31,8 @@ ReproTrail Server consumes the tagged [`reprotrail-spec`](https://github.com/sar
 | `GET /v1/projects/{projectId}/traces/{traceId}/replay-jobs` | Implemented | Project developer token | List recent replay jobs and artifact metadata |
 | `GET /v1/projects/{projectId}/replay-jobs/{jobId}` | Implemented | Project developer token | Read outcome, attempts, failures, and artifact metadata |
 | `GET /v1/projects/{projectId}/replay-jobs/{jobId}/artifacts/{name}` | Implemented | Project developer token | Download and audit one replay artifact |
+| `GET /v1/projects/{projectId}/retention-policy` | Implemented | Project admin token | Read the effective project retention period and override metadata |
+| `PUT /v1/projects/{projectId}/retention-policy` | Implemented | Project admin token | Set and audit a bounded project retention override |
 
 The internal worker API leases jobs, heartbeats ownership, downloads the trace and registered APK, uploads immutable diagnostics, and completes or fails an attempt under `/internal/v1/projects/{projectId}/replay-jobs/**`. It accepts only a project-scoped `rt_worker_` credential. This API is not an Android-client or developer-client surface.
 
@@ -41,6 +43,8 @@ Bearer credentials use `rt_ingest_<credential-uuid>.<base64url-secret>`. Only an
 Developer credentials use the separate `rt_dev_<credential-uuid>.<base64url-secret>` prefix and `developer_credentials` table. They grant project-scoped read, download, and delete authority but never ingestion authority. Downloads and deletions retain the acting developer credential ID in append-oriented audit events. List cursors are opaque and clients must not construct or edit them.
 
 Administrative credentials use `rt_admin_<credential-uuid>.<base64url-secret>` and are stored separately from developer credentials. They grant only project-scoped retention-policy administration; developer, worker, and ingest tokens cannot be substituted for this authority.
+
+Retention policies accept whole-day values from 1 through 3650. Projects without an override use `reprotrail.maintenance.retention` (30 days by default). The maintenance query applies each project override before reserving a bounded deletion batch, and every policy update appends an admin-attributed `retention_policy_updated` audit event.
 
 Trace search accepts optional `query`, `packageName`, `captureMode`, `startedAfter`, and `startedBefore` parameters. `query` performs a case-insensitive substring match against package name and session ID; the other fields are exact or half-open time-range filters. Filters compose with the opaque cursor and never cross the authenticated project boundary.
 

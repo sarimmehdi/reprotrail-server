@@ -18,6 +18,8 @@ import dev.reprotrail.server.security.DeveloperCredentialLookup
 import dev.reprotrail.server.security.IngestCredentialLookup
 import dev.reprotrail.server.security.SecureIngestAuthorizer
 import dev.reprotrail.server.retention.TraceRetentionCatalog
+import dev.reprotrail.server.retention.RetentionPolicyStore
+import dev.reprotrail.server.retention.RetentionPolicyUpdate
 import dev.reprotrail.server.reconciliation.ReconciliationState
 import dev.reprotrail.server.reconciliation.TraceArtifactInspection
 import dev.reprotrail.server.reconciliation.TraceArtifactInspector
@@ -92,6 +94,9 @@ class PostgresCredentialIntegrationTest {
     private lateinit var traceRetentionCatalog: TraceRetentionCatalog
 
     @Autowired
+    private lateinit var retentionPolicyStore: RetentionPolicyStore
+
+    @Autowired
     private lateinit var traceReconciliationCatalog: TraceReconciliationCatalog
 
     @Autowired
@@ -106,6 +111,7 @@ class PostgresCredentialIntegrationTest {
         jdbc.sql("delete from audit_events").update()
         jdbc.sql("delete from traces").update()
         jdbc.sql("delete from developer_credentials").update()
+        jdbc.sql("delete from project_retention_policies").update()
         jdbc.sql("delete from admin_credentials").update()
         jdbc.sql("delete from ingest_credentials").update()
         jdbc.sql("delete from projects").update()
@@ -136,6 +142,7 @@ class PostgresCredentialIntegrationTest {
                     "developer_credentials",
                     "ingest_credentials",
                     "projects",
+                    "project_retention_policies",
                     "traces",
                 ),
             ),
@@ -358,9 +365,59 @@ class PostgresCredentialIntegrationTest {
         insertTrace(newId, "2026-08-10T00:00:00Z", "available")
         insertTrace(pendingId, "2026-05-01T00:00:00Z", "pending")
 
-        val expired = traceRetentionCatalog.findExpired(Instant.parse("2026-07-01T00:00:00Z"), 1)
+        val expired =
+            traceRetentionCatalog.findExpired(
+                Instant.parse("2026-08-15T00:00:00Z"),
+                java.time.Duration.ofDays(45),
+                1,
+            )
 
         assertEquals(listOf(oldId), expired.map { it.sessionId })
+    }
+
+    @Test
+    fun `project retention override controls expiry and records an admin audit event`() {
+        val adminId = UUID.randomUUID()
+        val oldId = UUID.randomUUID()
+        val recentId = UUID.randomUUID()
+        jdbc.sql(
+            """
+            insert into admin_credentials (id, project_id, token_digest)
+            values (:id, :projectId, :digest)
+            """.trimIndent(),
+        ).param("id", adminId)
+            .param("projectId", projectId)
+            .param("digest", ByteArray(32) { 4 })
+            .update()
+        insertTrace(oldId, "2026-08-01T00:00:00Z", "available")
+        insertTrace(recentId, "2026-08-12T00:00:00Z", "available")
+
+        retentionPolicyStore.update(
+            RetentionPolicyUpdate(
+                projectId,
+                7,
+                adminId,
+                Instant.parse("2026-08-15T00:00:00Z"),
+            ),
+        )
+
+        val expired =
+            traceRetentionCatalog.findExpired(
+                Instant.parse("2026-08-15T00:00:00Z"),
+                java.time.Duration.ofDays(30),
+                10,
+            )
+
+        assertEquals(listOf(oldId), expired.map { it.sessionId })
+        assertEquals(7, retentionPolicyStore.find(projectId)?.retainForDays)
+        assertEquals(
+            "retention_policy_updated",
+            jdbc.sql("select action from audit_events where project_id = :projectId and actor_credential_id = :actorId")
+                .param("projectId", projectId)
+                .param("actorId", adminId)
+                .query(String::class.java)
+                .single(),
+        )
     }
 
     @Test

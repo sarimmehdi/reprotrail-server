@@ -119,7 +119,22 @@ class ReproTrailServerApplicationTest {
         internal fun applicationClock(): Clock = Clock.systemUTC()
 
         @Bean
-        internal fun traceRetentionCatalog(): TraceRetentionCatalog = TraceRetentionCatalog { _, _ -> emptyList() }
+        internal fun traceRetentionCatalog(): TraceRetentionCatalog = TraceRetentionCatalog { _, _, _ -> emptyList() }
+
+        @Bean
+        internal fun retentionPolicyStore(): dev.reprotrail.server.retention.RetentionPolicyStore =
+            object : dev.reprotrail.server.retention.RetentionPolicyStore {
+                override fun find(projectId: java.util.UUID) = null
+
+                override fun update(update: dev.reprotrail.server.retention.RetentionPolicyUpdate) =
+                    dev.reprotrail.server.retention.ProjectRetentionPolicy(
+                        update.projectId,
+                        update.retainForDays,
+                        true,
+                        update.updatedAt,
+                        update.adminCredentialId,
+                    )
+            }
 
         @Bean
         internal fun traceArtifactInspector(): TraceArtifactInspector =

@@ -3,6 +3,7 @@ package dev.reprotrail.server.persistence
 import dev.reprotrail.server.retention.RetainedTraceIdentity
 import dev.reprotrail.server.retention.TraceRetentionCatalog
 import java.time.Instant
+import java.time.Duration
 import java.time.ZoneOffset
 import java.util.UUID
 import org.springframework.jdbc.core.simple.JdbcClient
@@ -10,16 +11,25 @@ import org.springframework.jdbc.core.simple.JdbcClient
 internal class JdbcTraceRetentionCatalog(
     private val jdbc: JdbcClient,
 ) : TraceRetentionCatalog {
-    override fun findExpired(createdBefore: Instant, limit: Int): List<RetainedTraceIdentity> =
+    override fun findExpired(
+        asOf: Instant,
+        defaultRetainFor: Duration,
+        limit: Int,
+    ): List<RetainedTraceIdentity> =
         jdbc.sql(
             """
-            select project_id, session_id
+            select traces.project_id, traces.session_id
             from traces
-            where storage_state = 'available' and created_at < :createdBefore
-            order by created_at, project_id, session_id
+            left join project_retention_policies policies on policies.project_id = traces.project_id
+            where traces.storage_state = 'available'
+              and traces.created_at < :asOf - make_interval(
+                  secs => cast(coalesce(policies.retain_for_days * 86400, :defaultRetentionSeconds) as double precision)
+              )
+            order by traces.created_at, traces.project_id, traces.session_id
             limit :limit
             """.trimIndent(),
-        ).param("createdBefore", createdBefore.atOffset(ZoneOffset.UTC))
+        ).param("asOf", asOf.atOffset(ZoneOffset.UTC))
+            .param("defaultRetentionSeconds", defaultRetainFor.seconds)
             .param("limit", limit)
             .query { resultSet, _ ->
                 RetainedTraceIdentity(

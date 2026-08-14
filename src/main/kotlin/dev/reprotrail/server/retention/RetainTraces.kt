@@ -14,7 +14,7 @@ internal data class RetainedTraceIdentity(
 )
 
 internal fun interface TraceRetentionCatalog {
-    fun findExpired(createdBefore: Instant, limit: Int): List<RetainedTraceIdentity>
+    fun findExpired(asOf: Instant, defaultRetainFor: Duration, limit: Int): List<RetainedTraceIdentity>
 }
 
 internal data class TraceRetentionReport(
@@ -41,7 +41,7 @@ internal class RetainTraces(
         var deleted = 0
         var alreadyMissing = 0
         var failed = 0
-        val candidates = catalog.findExpired(clock.instant().minus(retainFor), batchSize)
+        val candidates = catalog.findExpired(clock.instant(), retainFor, batchSize)
         candidates.forEach { candidate ->
             try {
                 when (
