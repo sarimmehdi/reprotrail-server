@@ -44,7 +44,7 @@ dependencies {
     implementation("software.amazon.awssdk:s3")
     implementation("software.amazon.awssdk:url-connection-client")
     runtimeOnly("org.postgresql:postgresql")
-    testImplementation("com.tngtech.archunit:archunit:1.4.2")
+    testImplementation("com.tngtech.archunit:archunit:1.5.0")
     testImplementation("org.springframework.boot:spring-boot-starter-actuator-test")
     testImplementation("org.springframework.boot:spring-boot-starter-flyway-test")
     testImplementation("org.springframework.boot:spring-boot-starter-jdbc-test")
